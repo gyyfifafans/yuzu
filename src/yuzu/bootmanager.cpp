@@ -1,15 +1,21 @@
+// Copyright 2014 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QOpenGLWindow>
+#include <QPainter>
 #include <QScreen>
 #include <QWindow>
-
 #include <fmt/format.h>
-
+#include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/string_util.h"
 #include "core/core.h"
+#include "core/frontend/cpu_thread.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "core/settings.h"
 #include "input_common/keyboard.h"
@@ -17,10 +23,53 @@
 #include "input_common/motion_emu.h"
 #include "yuzu/bootmanager.h"
 
+class GCpuThread : public CpuThread, public QThread {
+public:
+    explicit GCpuThread(GRenderWindow* render_window) : CpuThread() {
+        context = std::make_unique<QOpenGLContext>();
+        context->setShareContext(render_window->GetSharedContext());
+        auto fmt = render_window->GetSharedContext()->format();
+        context->setFormat(fmt);
+        context->create();
+        surface = render_window->GetSurface();
+    }
+
+    void Start() override {
+        running = true;
+        context->moveToThread(this);
+        start();
+    }
+
+    bool IsCurrentRunningThread() override {
+        // NGLOG_WARNING(Frontend, "IsCurrentThread {}", this == currentThread());
+        return this == currentThread();
+    }
+
+    void run() override {
+        context->makeCurrent(surface);
+        Run();
+    }
+
+private:
+    std::unique_ptr<QOpenGLContext> context;
+    QSurface* surface;
+};
+
 EmuThread::EmuThread(GRenderWindow* render_window) : render_window(render_window) {}
 
 void EmuThread::run() {
     render_window->MakeCurrent();
+    // Setup the CPU cores
+
+    boost::optional<Core::CpuThreads> cpu_threads = boost::none;
+    if (Settings::values.use_multi_core) {
+        Core::CpuThreads threads{};
+        for (auto& t : threads) {
+            t = std::make_unique<GCpuThread>(render_window);
+        }
+        cpu_threads = {std::move(threads)};
+    }
+    Core::System::GetInstance().CpuInit(std::move(cpu_threads));
 
     MicroProfileOnThreadCreate("EmuThread");
 
@@ -73,10 +122,10 @@ void EmuThread::run() {
 // This class overrides paintEvent and resizeEvent to prevent the GUI thread from stealing GL
 // context.
 // The corresponding functionality is handled in EmuThread instead
-class GGLWidgetInternal : public QGLWidget {
+class GGLWidgetInternal : public QOpenGLWindow {
 public:
-    GGLWidgetInternal(QGLFormat fmt, GRenderWindow* parent)
-        : QGLWidget(fmt, parent), parent(parent) {}
+    GGLWidgetInternal(GRenderWindow* parent, QOpenGLContext* shared_context)
+        : QOpenGLWindow(shared_context), parent(parent) {}
 
     void paintEvent(QPaintEvent* ev) override {
         if (do_painting) {
@@ -102,7 +151,7 @@ private:
 };
 
 GRenderWindow::GRenderWindow(QWidget* parent, EmuThread* emu_thread)
-    : QWidget(parent), child(nullptr), emu_thread(emu_thread) {
+    : QWidget(parent), child(nullptr), context(nullptr), emu_thread(emu_thread) {
 
     std::string window_title = fmt::format("yuzu {} | {}-{}", Common::g_build_name,
                                            Common::g_scm_branch, Common::g_scm_desc);
@@ -123,7 +172,7 @@ void GRenderWindow::moveContext() {
     auto thread = (QThread::currentThread() == qApp->thread() && emu_thread != nullptr)
                       ? emu_thread
                       : qApp->thread();
-    child->context()->moveToThread(thread);
+    context->moveToThread(thread);
 }
 
 void GRenderWindow::SwapBuffers() {
@@ -132,17 +181,17 @@ void GRenderWindow::SwapBuffers() {
     // since the last time you called swapBuffers. This presumably means something if you're using
     // QGLWidget the "regular" way, but in our multi-threaded use case is harmless since we never
     // call doneCurrent in this thread.
-    child->makeCurrent();
+    context->makeCurrent(child);
 #endif
-    child->swapBuffers();
+    context->swapBuffers(child);
 }
 
 void GRenderWindow::MakeCurrent() {
-    child->makeCurrent();
+    context->makeCurrent(child);
 }
 
 void GRenderWindow::DoneCurrent() {
-    child->doneCurrent();
+    context->doneCurrent();
 }
 
 void GRenderWindow::PollEvents() {}
@@ -162,7 +211,7 @@ void GRenderWindow::OnFramebufferSizeChanged() {
 }
 
 void GRenderWindow::BackupGeometry() {
-    geometry = ((QGLWidget*)this)->saveGeometry();
+    geometry = ((QWidget*)this)->saveGeometry();
 }
 
 void GRenderWindow::RestoreGeometry() {
@@ -180,7 +229,7 @@ QByteArray GRenderWindow::saveGeometry() {
     // If we are a top-level widget, store the current geometry
     // otherwise, store the last backup
     if (parent() == nullptr)
-        return ((QGLWidget*)this)->saveGeometry();
+        return ((QWidget*)this)->saveGeometry();
     else
         return geometry;
 }
@@ -238,7 +287,23 @@ void GRenderWindow::OnClientAreaResized(unsigned width, unsigned height) {
     NotifyClientAreaSizeChanged(std::make_pair(width, height));
 }
 
+QOpenGLContext* GRenderWindow::GetSharedContext() const {
+    return shared_context.get();
+}
+
+QSurface* GRenderWindow::GetSurface() const {
+    return child;
+}
+
 void GRenderWindow::InitRenderTarget() {
+    if (shared_context) {
+        shared_context.reset();
+    }
+
+    if (context) {
+        context.reset();
+    }
+
     if (child) {
         delete child;
     }
@@ -249,18 +314,31 @@ void GRenderWindow::InitRenderTarget() {
 
     // TODO: One of these flags might be interesting: WA_OpaquePaintEvent, WA_NoBackground,
     // WA_DontShowOnScreen, WA_DeleteOnClose
-    QGLFormat fmt;
+    QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
-    fmt.setProfile(QGLFormat::CoreProfile);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+    // TODO: expose a setting for buffer value (ie default/single/double/triple)
+    fmt.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);
+    // fmt.setSwapBehavior(QSurfaceFormat::SingleBuffer);
 
-    // Requests a forward-compatible context, which is required to get a 3.2+ context on OS X
-    fmt.setOption(QGL::NoDeprecatedFunctions);
+    shared_context = std::make_unique<QOpenGLContext>();
+    shared_context->setFormat(fmt);
+    shared_context->create();
 
-    child = new GGLWidgetInternal(fmt, this);
+    context = std::make_unique<QOpenGLContext>();
+    context->setShareContext(shared_context.get());
+    context->setFormat(fmt);
+    context->create();
+
+    child = new GGLWidgetInternal(this, shared_context.get());
+    QWidget* container = QWidget::createWindowContainer(child, this);
+
     QBoxLayout* layout = new QHBoxLayout(this);
 
     resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
-    layout->addWidget(child);
+    child->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
+    container->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
+    layout->addWidget(container);
     layout->setMargin(0);
     setLayout(layout);
 
@@ -270,6 +348,8 @@ void GRenderWindow::InitRenderTarget() {
     NotifyClientAreaSizeChanged(std::pair<unsigned, unsigned>(child->width(), child->height()));
 
     BackupGeometry();
+    // show causes the window to actually be created and the gl context as well
+    show();
 }
 
 void GRenderWindow::OnMinimalClientAreaChangeRequest(

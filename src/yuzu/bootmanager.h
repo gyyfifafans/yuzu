@@ -7,14 +7,16 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <QGLWidget>
 #include <QThread>
+#include <QWidget>
 #include "common/thread.h"
 #include "core/core.h"
 #include "core/frontend/emu_window.h"
 
 class QKeyEvent;
 class QScreen;
+class QSurface;
+class QOpenGLContext;
 
 class GGLWidgetInternal;
 class GMainWindow;
@@ -136,6 +138,10 @@ public:
 
     void InitRenderTarget();
 
+    QOpenGLContext* GetSharedContext() const;
+
+    QSurface* GetSurface() const;
+
 public slots:
     void moveContext(); // overridden
 
@@ -152,6 +158,9 @@ private:
         const std::pair<unsigned, unsigned>& minimal_size) override;
 
     GGLWidgetInternal* child;
+
+    std::unique_ptr<QOpenGLContext> context;
+    std::unique_ptr<QOpenGLContext> shared_context;
 
     QByteArray geometry;
 

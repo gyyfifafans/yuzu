@@ -5,8 +5,10 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <tuple>
 #include <utility>
+#include <queue>
 #include "common/common_types.h"
 #include "core/frontend/framebuffer_layout.h"
 

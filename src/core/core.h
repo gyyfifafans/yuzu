@@ -13,6 +13,7 @@
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/scheduler.h"
 #include "core/loader/loader.h"
+#include "core/frontend/cpu_thread.h"
 #include "core/memory.h"
 #include "core/perf_stats.h"
 #include "core/telemetry_session.h"
@@ -27,6 +28,8 @@ class ServiceManager;
 }
 
 namespace Core {
+
+using CpuThreads = std::array<std::unique_ptr<CpuThread>, NUM_CPU_CORES - 1>;
 
 class System {
 public:
@@ -79,12 +82,23 @@ public:
     void Shutdown();
 
     /**
-     * Load an executable application.
+     * Load an executable application. Checks for any potential errors in initalizing the video core
+     * and file loaders
      * @param emu_window Pointer to the host-system window used for video output and keyboard input.
      * @param filepath String path to the executable application to load on the host file system.
      * @returns ResultStatus code, indicating if the operation succeeded.
      */
     ResultStatus Load(EmuWindow* emu_window, const std::string& filepath);
+
+    /**
+     * Initialize the emulated kernel and cpus. This must be called from main emuthread and not from
+     * the ui thread.
+     * @param cpu_threads If the user has multicore enabled, then the frontend should pass in an
+     * array of CpuThreads for the core to run. If multicore is not enabled, then pass in boost:none
+     * @param system_mode The system mode.
+     * @return ResultStatus code, indicating if the operation succeeded.
+     */
+    ResultStatus CpuInit(boost::optional<CpuThreads> cpu_threads);
 
     /**
      * Indicates if the emulated system is powered on (all subsystems initialized and able to run an
@@ -171,14 +185,6 @@ private:
     /// Returns the currently running CPU core
     Cpu& CurrentCpuCore();
 
-    /**
-     * Initialize the emulated system.
-     * @param emu_window Pointer to the host-system window used for video output and keyboard input.
-     * @param system_mode The system mode.
-     * @return ResultStatus code, indicating if the operation succeeded.
-     */
-    ResultStatus Init(EmuWindow* emu_window, u32 system_mode);
-
     /// AppLoader used to load the current executing application
     std::unique_ptr<Loader::AppLoader> app_loader;
     std::unique_ptr<Tegra::GPU> gpu_core;
@@ -186,7 +192,7 @@ private:
     Kernel::SharedPtr<Kernel::Process> current_process;
     std::shared_ptr<CpuBarrier> cpu_barrier;
     std::array<std::shared_ptr<Cpu>, NUM_CPU_CORES> cpu_cores;
-    std::array<std::unique_ptr<std::thread>, NUM_CPU_CORES - 1> cpu_core_threads;
+    CpuThreads cpu_core_threads;
     size_t active_core{}; ///< Active core, only used in single thread mode
 
     /// Service manager
@@ -199,9 +205,6 @@ private:
 
     ResultStatus status = ResultStatus::Success;
     std::string status_details = "";
-
-    /// Map of guest threads to CPU cores
-    std::map<std::thread::id, std::shared_ptr<Cpu>> thread_to_cpu;
 };
 
 inline ARM_Interface& CurrentArmInterface() {

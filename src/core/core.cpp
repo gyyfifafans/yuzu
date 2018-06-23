@@ -2,11 +2,14 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "core/core_timing.h"
+#include "core/frontend/cpu_thread.h"
+#include "core/frontend/emu_window.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/kernel/client_port.h"
 #include "core/hle/kernel/kernel.h"
@@ -21,26 +24,30 @@
 #include "core/settings.h"
 #include "video_core/video_core.h"
 
+/// Runs a CPU core while the system is powered on
+void CpuThread::Run() {
+    while (Core::System::GetInstance().IsPoweredOn()) {
+        core->RunLoop(true);
+    }
+}
+
 namespace Core {
 
 /*static*/ System System::s_instance;
 
 System::~System() = default;
 
-/// Runs a CPU core while the system is powered on
-static void RunCpuCore(std::shared_ptr<Cpu> cpu_state) {
-    while (Core::System().GetInstance().IsPoweredOn()) {
-        cpu_state->RunLoop(true);
-    }
-}
-
 Cpu& System::CurrentCpuCore() {
     // If multicore is enabled, use host thread to figure out the current CPU core
     if (Settings::values.use_multi_core) {
-        const auto& search = thread_to_cpu.find(std::this_thread::get_id());
-        ASSERT(search != thread_to_cpu.end());
-        ASSERT(search->second);
-        return *search->second;
+        const auto search = std::find_if(cpu_core_threads.begin(), cpu_core_threads.end(),
+                                         [](auto& t) { return t->IsCurrentRunningThread(); });
+        // if none of the extra threads are the current core, then it must be the cpu core thats
+        // running on the EmuThread
+        if (search == cpu_core_threads.end()) {
+            return *cpu_cores[0];
+        }
+        return *cpu_cores[std::distance(cpu_core_threads.begin(), search)];
     }
 
     // Otherwise, use single-threaded mode active_core variable
@@ -49,9 +56,6 @@ Cpu& System::CurrentCpuCore() {
 
 System::ResultStatus System::RunLoop(bool tight_loop) {
     status = ResultStatus::Success;
-
-    // Update thread_to_cpu in case Core 0 is run from a different host thread
-    thread_to_cpu[std::this_thread::get_id()] = cpu_cores[0];
 
     if (GDBStub::IsServerEnabled()) {
         GDBStub::HandlePacket();
@@ -109,12 +113,29 @@ System::ResultStatus System::Load(EmuWindow* emu_window, const std::string& file
         }
     }
 
-    ResultStatus init_result{Init(emu_window, system_mode.first.get())};
-    if (init_result != ResultStatus::Success) {
-        NGLOG_CRITICAL(Core, "Failed to initialize system (Error {})!",
-                       static_cast<int>(init_result));
-        System::Shutdown();
-        return init_result;
+    NGLOG_DEBUG(HW_Memory, "initialized OK");
+
+    CoreTiming::Init();
+
+    current_process = Kernel::Process::Create("main");
+
+    cpu_barrier = std::make_shared<CpuBarrier>();
+    for (size_t index = 0; index < cpu_cores.size(); ++index) {
+        cpu_cores[index] = std::make_shared<Cpu>(cpu_barrier, index);
+    }
+
+    gpu_core = std::make_unique<Tegra::GPU>();
+    telemetry_session = std::make_unique<Core::TelemetrySession>();
+    service_manager = std::make_shared<Service::SM::ServiceManager>();
+
+    HW::Init();
+    Kernel::Init(system_mode.first.get());
+    Service::Init(service_manager);
+    GDBStub::Init();
+
+    if (!VideoCore::Init(emu_window)) {
+        NGLOG_CRITICAL(Core, "Failed to initialize video core!");
+        return ResultStatus::ErrorVideoCore;
     }
 
     const Loader::ResultStatus load_result{app_loader->Load(current_process)};
@@ -134,6 +155,8 @@ System::ResultStatus System::Load(EmuWindow* emu_window, const std::string& file
         }
     }
     status = ResultStatus::Success;
+
+    NGLOG_DEBUG(Core, "Initialized OK");
     return status;
 }
 
@@ -160,44 +183,17 @@ Cpu& System::CpuCore(size_t core_index) {
     return *cpu_cores[core_index];
 }
 
-System::ResultStatus System::Init(EmuWindow* emu_window, u32 system_mode) {
-    NGLOG_DEBUG(HW_Memory, "initialized OK");
+System::ResultStatus System::CpuInit(boost::optional<CpuThreads> cpu_threads) {
 
-    CoreTiming::Init();
-
-    current_process = Kernel::Process::Create("main");
-
-    cpu_barrier = std::make_shared<CpuBarrier>();
-    for (size_t index = 0; index < cpu_cores.size(); ++index) {
-        cpu_cores[index] = std::make_shared<Cpu>(cpu_barrier, index);
-    }
-
-    gpu_core = std::make_unique<Tegra::GPU>();
-    telemetry_session = std::make_unique<Core::TelemetrySession>();
-    service_manager = std::make_shared<Service::SM::ServiceManager>();
-
-    HW::Init();
-    Kernel::Init(system_mode);
-    Service::Init(service_manager);
-    GDBStub::Init();
-
-    if (!VideoCore::Init(emu_window)) {
-        return ResultStatus::ErrorVideoCore;
-    }
-
-    // Create threads for CPU cores 1-3, and build thread_to_cpu map
-    // CPU core 0 is run on the main thread
-    thread_to_cpu[std::this_thread::get_id()] = cpu_cores[0];
     if (Settings::values.use_multi_core) {
-        for (size_t index = 0; index < cpu_core_threads.size(); ++index) {
-            cpu_core_threads[index] =
-                std::make_unique<std::thread>(RunCpuCore, cpu_cores[index + 1]);
-            thread_to_cpu[cpu_core_threads[index]->get_id()] = cpu_cores[index + 1];
+        cpu_core_threads = std::move(cpu_threads.get());
+        // Core 0 is run on the main thread, so start with core 1
+        size_t i = 1;
+        for (const auto& thread : cpu_core_threads) {
+            thread->SetCpu(cpu_cores[i++]);
+            thread->Start();
         }
     }
-
-    NGLOG_DEBUG(Core, "Initialized OK");
-
     // Reset counters and set time origin to current frame
     GetAndResetPerfStats();
     perf_stats.BeginSystemFrame();
@@ -229,11 +225,10 @@ void System::Shutdown() {
     cpu_barrier->NotifyEnd();
     if (Settings::values.use_multi_core) {
         for (auto& thread : cpu_core_threads) {
-            thread->join();
+            thread->Stop();
             thread.reset();
         }
     }
-    thread_to_cpu.clear();
     for (auto& cpu_core : cpu_cores) {
         cpu_core.reset();
     }

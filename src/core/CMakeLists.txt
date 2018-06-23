@@ -29,6 +29,8 @@ add_library(core STATIC
     file_sys/sdmc_factory.cpp
     file_sys/sdmc_factory.h
     file_sys/storage.h
+    frontend/cpu_thread.cpp
+    frontend/cpu_thread.h
     frontend/emu_window.cpp
     frontend/emu_window.h
     frontend/framebuffer_layout.cpp
