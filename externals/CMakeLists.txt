@@ -39,6 +39,11 @@ target_include_directories(lz4_static INTERFACE ./lz4/lib)
 add_library(microprofile INTERFACE)
 target_include_directories(microprofile INTERFACE ./microprofile)
 
+# SoundTouch
+add_subdirectory(soundtouch)
+# The SoundTouch target doesn't export the necessary include paths as properties by default
+target_include_directories(SoundTouch INTERFACE ./soundtouch/include)
+
 # Unicorn
 add_library(unicorn-headers INTERFACE)
 target_include_directories(unicorn-headers INTERFACE ./unicorn/include)

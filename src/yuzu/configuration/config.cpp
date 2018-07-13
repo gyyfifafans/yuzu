@@ -92,6 +92,12 @@ void Config::ReadValues() {
     Settings::values.bg_blue = qt_config->value("bg_blue", 0.0).toFloat();
     qt_config->endGroup();
 
+    qt_config->beginGroup("Audio");
+    qt_config->setValue("output_engine", QString::fromStdString(Settings::values.sink_id));
+    qt_config->setValue("enable_audio_stretching", Settings::values.enable_audio_stretching);
+    qt_config->setValue("output_device", QString::fromStdString(Settings::values.audio_device_id));
+    qt_config->endGroup();
+
     qt_config->beginGroup("Data Storage");
     Settings::values.use_virtual_sd = qt_config->value("use_virtual_sd", true).toBool();
     qt_config->endGroup();
@@ -193,6 +199,14 @@ void Config::SaveValues() {
     qt_config->setValue("bg_red", (double)Settings::values.bg_red);
     qt_config->setValue("bg_green", (double)Settings::values.bg_green);
     qt_config->setValue("bg_blue", (double)Settings::values.bg_blue);
+    qt_config->endGroup();
+
+    qt_config->beginGroup("Audio");
+    Settings::values.sink_id = qt_config->value("output_engine", "auto").toString().toStdString();
+    Settings::values.enable_audio_stretching =
+        qt_config->value("enable_audio_stretching", true).toBool();
+    Settings::values.audio_device_id =
+        qt_config->value("output_device", "auto").toString().toStdString();
     qt_config->endGroup();
 
     qt_config->beginGroup("Data Storage");

@@ -109,6 +109,12 @@ void Config::ReadValues() {
     Settings::values.use_virtual_sd =
         sdl2_config->GetBoolean("Data Storage", "use_virtual_sd", true);
 
+    // Audio
+    Settings::values.sink_id = sdl2_config->Get("Audio", "output_engine", "auto");
+    Settings::values.enable_audio_stretching =
+        sdl2_config->GetBoolean("Audio", "enable_audio_stretching", true);
+    Settings::values.audio_device_id = sdl2_config->Get("Audio", "output_device", "auto");
+
     // System
     Settings::values.use_docked_mode = sdl2_config->GetBoolean("System", "use_docked_mode", true);
 

@@ -22,6 +22,10 @@
 class EmuWindow;
 class ARM_Interface;
 
+namespace AudioCore {
+class DspInterface;
+}
+
 namespace Service::SM {
 class ServiceManager;
 }
@@ -156,6 +160,14 @@ public:
         return *app_loader;
     }
 
+    /**
+     * Gets a reference to the audio core.
+     * @returns A reference to the emulated audio core.
+     */
+    AudioCore::DspInterface& DSP() {
+        return *dsp_core;
+    }
+
     Service::SM::ServiceManager& ServiceManager();
     const Service::SM::ServiceManager& ServiceManager() const;
 
@@ -188,6 +200,9 @@ private:
     std::array<std::shared_ptr<Cpu>, NUM_CPU_CORES> cpu_cores;
     std::array<std::unique_ptr<std::thread>, NUM_CPU_CORES - 1> cpu_core_threads;
     size_t active_core{}; ///< Active core, only used in single thread mode
+
+    /// Audio core
+    std::unique_ptr<AudioCore::DspInterface> dsp_core;
 
     /// Service manager
     std::shared_ptr<Service::SM::ServiceManager> service_manager;

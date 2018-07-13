@@ -135,11 +135,15 @@ struct Values {
     float bg_green;
     float bg_blue;
 
-    std::string log_filter;
+    // Audio
+    std::string sink_id;
+    bool enable_audio_stretching;
+    std::string audio_device_id;
 
     // Debugging
     bool use_gdbstub;
     u16 gdbstub_port;
+    std::string log_filter;
 } extern values;
 
 void Apply();
