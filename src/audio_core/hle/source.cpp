@@ -16,8 +16,6 @@ namespace AudioCore {
 namespace HLE {
 
 void Source::MixInto(QuadFrame32& dest, size_t intermediate_mix_id) const {
-    if (!state.enabled)
-        return;
 
     const std::array<float, 4>& gains = state.gain.at(intermediate_mix_id);
     for (size_t samplei = 0; samplei < samples_per_frame; samplei++) {

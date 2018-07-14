@@ -25,9 +25,6 @@ public:
     DspInterface& operator=(const DspInterface&) = delete;
     DspInterface& operator=(DspInterface&&) = delete;
 
-    /// Returns a reference to the array backing DSP memory
-    virtual std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() = 0;
-
     /// Select the sink to use based on sink id.
     void SetSink(const std::string& sink_id);
     /// Get the current sink

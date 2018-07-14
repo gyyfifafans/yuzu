@@ -13,6 +13,7 @@
 #include "audio_core/hle/filter.h"
 #include "audio_core/interpolate.h"
 #include "common/common_types.h"
+#include "shared_memory.h"
 
 namespace AudioCore {
 namespace HLE {
@@ -79,7 +80,7 @@ private:
 
     struct {
 
-        //TODO: STATES HERE
+        // TODO: STATES HERE
 
         // Mixing
 
