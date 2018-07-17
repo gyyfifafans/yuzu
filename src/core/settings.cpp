@@ -2,12 +2,14 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "audio_core/audio_interface.h"
+#include "audio_core/sink_details.h"
+#include "core/core.h"
+#include "core/frontend/emu_window.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/hid/hid.h"
 #include "core/settings.h"
 #include "video_core/video_core.h"
-
-#include "core/frontend/emu_window.h"
 
 namespace Settings {
 
@@ -26,8 +28,8 @@ void Apply() {
     }
 
     if (Core::System::GetInstance().IsPoweredOn()) {
-        Core::DSP().SetSink(values.sink_id);
-        Core::DSP().EnableStretching(values.enable_audio_stretching);
+        Core::AudioCore().SetSink(values.sink_id);
+        Core::AudioCore().EnableStretching(values.enable_audio_stretching);
     }
 
     Service::HID::ReloadInputDevices();

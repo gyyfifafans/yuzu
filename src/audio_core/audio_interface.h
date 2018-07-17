@@ -10,20 +10,21 @@
 #include "audio_core/time_stretch.h"
 #include "common/common_types.h"
 #include "core/memory.h"
+#include "audio_core/sink_details.h"
 
 namespace AudioCore {
 
 class Sink;
 
-class DspInterface {
+class AudioInterface {
 public:
-    DspInterface();
-    virtual ~DspInterface();
+    AudioInterface();
+    virtual ~AudioInterface();
 
-    DspInterface(const DspInterface&) = delete;
-    DspInterface(DspInterface&&) = delete;
-    DspInterface& operator=(const DspInterface&) = delete;
-    DspInterface& operator=(DspInterface&&) = delete;
+    AudioInterface(const AudioInterface&) = delete;
+    AudioInterface(AudioInterface&&) = delete;
+    AudioInterface& operator=(const AudioInterface&) = delete;
+    AudioInterface& operator=(AudioInterface&&) = delete;
 
     /// Select the sink to use based on sink id.
     void SetSink(const std::string& sink_id);

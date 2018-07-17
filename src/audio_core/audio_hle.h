@@ -8,16 +8,16 @@
 #include <memory>
 #include <vector>
 #include "audio_core/audio_types.h"
-#include "audio_core/dsp_interface.h"
+#include "audio_core/audio_interface.h"
 #include "common/common_types.h"
 #include "core/memory.h"
 
 namespace AudioCore {
 
-class DspHle final : public DspInterface {
+class AudioHle final : public AudioInterface {
 public:
-    DspHle();
-    ~DspHle();
+    AudioHle();
+    ~AudioHle();
 
 private:
     struct Impl;

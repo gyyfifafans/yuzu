@@ -3,11 +3,13 @@
 // Refer to the license.txt file included.
 
 #include <memory>
+#include "audio_core/audio_hle.h"
+#include "audio_core/audio_interface.h"
 #include "audio_core/sink.h"
 #include "audio_core/sink_details.h"
-#include "yuzu/configuration/configure_audio.h"
 #include "core/settings.h"
 #include "ui_configure_audio.h"
+#include "yuzu/configuration/configure_audio.h"
 
 ConfigureAudio::ConfigureAudio(QWidget* parent)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureAudio>()) {

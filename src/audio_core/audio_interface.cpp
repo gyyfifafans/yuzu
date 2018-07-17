@@ -3,33 +3,33 @@
 // Refer to the license.txt file included.
 
 #include <cstddef>
-#include "audio_core/dsp_interface.h"
+#include "audio_core/audio_interface.h"
 #include "audio_core/sink.h"
 #include "audio_core/sink_details.h"
 #include "common/assert.h"
 
 namespace AudioCore {
 
-DspInterface::DspInterface() = default;
+AudioInterface::AudioInterface() = default;
 
-DspInterface::~DspInterface() {
+AudioInterface::~AudioInterface() {
     if (perform_time_stretching) {
         FlushResidualStretcherAudio();
     }
 }
 
-void DspInterface::SetSink(const std::string& sink_id) {
+void AudioInterface::SetSink(const std::string& sink_id) {
     const SinkDetails& sink_details = GetSinkDetails(sink_id);
     sink = sink_details.factory();
     time_stretcher.SetOutputSampleRate(sink->GetNativeSampleRate());
 }
 
-Sink& DspInterface::GetSink() {
+Sink& AudioInterface::GetSink() {
     ASSERT(sink);
     return *sink.get();
 }
 
-void DspInterface::EnableStretching(bool enable) {
+void AudioInterface::EnableStretching(bool enable) {
     if (perform_time_stretching == enable)
         return;
 
@@ -39,7 +39,7 @@ void DspInterface::EnableStretching(bool enable) {
     perform_time_stretching = enable;
 }
 
-void DspInterface::OutputFrame(const StereoFrame16& frame) {
+void AudioInterface::OutputFrame(const StereoFrame16& frame) {
     if (!sink)
         return;
 
@@ -59,7 +59,7 @@ void DspInterface::OutputFrame(const StereoFrame16& frame) {
     }
 }
 
-void DspInterface::FlushResidualStretcherAudio() {
+void AudioInterface::FlushResidualStretcherAudio() {
     if (!sink)
         return;
 

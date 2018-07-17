@@ -4,8 +4,7 @@
 
 #include <memory>
 #include <utility>
-#include "audio_core/dsp_interface.h"
-#include "audio_core/hle/hle.h"
+#include "audio_core/audio_interface.h"
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "core/core_timing.h"
@@ -22,6 +21,7 @@
 #include "core/memory_setup.h"
 #include "core/settings.h"
 #include "video_core/video_core.h"
+#include "audio_core/audio_hle.h"
 
 namespace Core {
 
@@ -174,9 +174,9 @@ System::ResultStatus System::Init(EmuWindow* emu_window, u32 system_mode) {
         cpu_cores[index] = std::make_shared<Cpu>(cpu_barrier, index);
     }
 
-    dsp_core = std::make_unique<AudioCore::DspHle>(); //TODO: Find better name
-    dsp_core->SetSink(Settings::values.sink_id);
-    dsp_core->EnableStretching(Settings::values.enable_audio_stretching);
+    audio_core = std::make_unique<AudioCore::AudioHle>(); // TODO: Find better name / Fix include error
+    audio_core->SetSink(Settings::values.sink_id);
+    audio_core->EnableStretching(Settings::values.enable_audio_stretching);
 
     gpu_core = std::make_unique<Tegra::GPU>();
     telemetry_session = std::make_unique<Core::TelemetrySession>();

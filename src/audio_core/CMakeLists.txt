@@ -2,18 +2,10 @@ add_library(audio_core STATIC
     audio_types.h
     codec.cpp
     codec.h
-    dsp_interface.cpp
-    dsp_interface.h
-    hle/common.h
-    hle/filter.cpp
-    hle/filter.h
-    hle/hle.cpp
-    hle/hle.h
-    hle/mixers.cpp
-    hle/mixers.h
-    hle/shared_memory.h
-    hle/source.cpp
-    hle/source.h
+    audio_interface.cpp
+    audio_interface.h
+    audio_hle.h
+    audio_hle.cpp
     interpolate.cpp
     interpolate.h
     null_sink.h

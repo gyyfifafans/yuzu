@@ -3,36 +3,32 @@
 // Refer to the license.txt file included.
 
 #include "audio_core/audio_types.h"
-#include "audio_core/hle/common.h"
-#include "audio_core/hle/hle.h"
-#include "audio_core/hle/mixers.h"
-#include "audio_core/hle/shared_memory.h"
-#include "audio_core/hle/source.h"
 #include "audio_core/sink.h"
 #include "common/assert.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
 #include "core/core_timing.h"
+#include "audio_hle.h"
 
 namespace AudioCore {
 
-static constexpr u64 audio_frame_ticks = 1310252ull; ///< Units: ARM11 cycles
-
-struct DspHle::Impl final {
+struct AudioHle::Impl final {
 public:
+    explicit Impl(AudioHle& parent);
     ~Impl();
 
 private:
     StereoFrame16 GenerateCurrentFrame();
     bool Tick();
 
-    HLE::Mixers mixers;
-
-    DspHle& parent;
+    AudioHle& parent;
     CoreTiming::EventType* tick_event;
 };
 
-StereoFrame16 DspHle::Impl::GenerateCurrentFrame() {
+AudioHle::Impl::Impl(AudioHle& parent_) : parent(parent_) {
+}
+
+StereoFrame16 AudioHle::Impl::GenerateCurrentFrame() {
     std::array<QuadFrame32, 3> intermediate_mixes = {};
 
     // Generate intermediate mixes
@@ -48,7 +44,7 @@ StereoFrame16 DspHle::Impl::GenerateCurrentFrame() {
     write.dsp_status = mixers.Tick(read.dsp_configuration, read.intermediate_mix_samples,
                                    write.intermediate_mix_samples, intermediate_mixes); */
 
-    StereoFrame16 output_frame = mixers.GetOutput();
+    StereoFrame16 output_frame = StereoFrame16();
 
    /* // Write current output frame to the shared memory region
     for (size_t samplei = 0; samplei < output_frame.size(); samplei++) {
@@ -60,7 +56,7 @@ StereoFrame16 DspHle::Impl::GenerateCurrentFrame() {
     return output_frame;
 }
 
-bool DspHle::Impl::Tick() {
+bool AudioHle::Impl::Tick() {
     StereoFrame16 current_frame = {};
 
     // TODO: Check dsp::DSP semaphore (which indicates emulated application has finished writing to
@@ -72,7 +68,7 @@ bool DspHle::Impl::Tick() {
     return true;
 }
 
-DspHle::DspHle() : impl(std::make_unique<Impl>(*this)) {}
-DspHle::~DspHle() = default;
+AudioHle::AudioHle() : impl(std::make_unique<Impl>(*this)) {}
+AudioHle::~AudioHle() = default;
 
 } // namespace AudioCore

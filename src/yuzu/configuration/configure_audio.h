@@ -6,6 +6,9 @@
 
 #include <memory>
 #include <QWidget>
+#include "audio_core/sink.h"
+#include "audio_core/sink_details.h"
+#include "audio_core/audio_interface.h"
 
 namespace Ui {
 class ConfigureAudio;
