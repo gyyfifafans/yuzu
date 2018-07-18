@@ -126,8 +126,8 @@ RasterizerOpenGL::~RasterizerOpenGL() {
 std::pair<u8*, GLintptr> RasterizerOpenGL::SetupVertexArrays(u8* array_ptr,
                                                              GLintptr buffer_offset) {
     MICROPROFILE_SCOPE(OpenGL_VAO);
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
-    const auto& memory_manager = Core::System().GetInstance().GPU().memory_manager;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
+    const auto& memory_manager = Core::System::GetInstance().GPU().memory_manager;
 
     state.draw.vertex_array = hw_vao.handle;
     state.draw.vertex_buffer = stream_buffer->GetHandle();
@@ -182,7 +182,7 @@ std::pair<u8*, GLintptr> RasterizerOpenGL::SetupVertexArrays(u8* array_ptr,
 }
 
 static GLShader::ProgramCode GetShaderProgramCode(Maxwell::ShaderProgram program) {
-    auto& gpu = Core::System().GetInstance().GPU().Maxwell3D();
+    auto& gpu = Core::System::GetInstance().GPU().Maxwell3D();
 
     // Fetch program code from memory
     GLShader::ProgramCode program_code;
@@ -205,7 +205,7 @@ void RasterizerOpenGL::SetupShaders(u8* buffer_ptr, GLintptr buffer_offset) {
         }
     };
 
-    auto& gpu = Core::System().GetInstance().GPU().Maxwell3D();
+    auto& gpu = Core::System::GetInstance().GPU().Maxwell3D();
 
     // Next available bindpoints to use when uploading the const buffers and textures to the GLSL
     // shaders. The constbuffer bindpoint starts after the shader stage configuration bind points.
@@ -295,7 +295,7 @@ void RasterizerOpenGL::SetupShaders(u8* buffer_ptr, GLintptr buffer_offset) {
 }
 
 size_t RasterizerOpenGL::CalculateVertexArraysSize() const {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     size_t size = 0;
     for (u32 index = 0; index < Maxwell::NumVertexArrays; ++index) {
@@ -320,7 +320,7 @@ bool RasterizerOpenGL::AccelerateDrawBatch(bool is_indexed) {
 
 std::pair<Surface, Surface> RasterizerOpenGL::ConfigureFramebuffers(bool using_color_fb,
                                                                     bool using_depth_fb) {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     // Sync the depth test state before configuring the framebuffer surfaces.
     SyncDepthTestState();
@@ -375,7 +375,7 @@ std::pair<Surface, Surface> RasterizerOpenGL::ConfigureFramebuffers(bool using_c
 }
 
 void RasterizerOpenGL::Clear() {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     bool use_color_fb = false;
     bool use_depth_fb = false;
@@ -418,7 +418,7 @@ void RasterizerOpenGL::DrawArrays() {
         return;
 
     MICROPROFILE_SCOPE(OpenGL_Drawing);
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     auto [dirty_color_surface, dirty_depth_surface] =
         ConfigureFramebuffers(true, regs.zeta.Address() != 0);
@@ -462,7 +462,7 @@ void RasterizerOpenGL::DrawArrays() {
     // If indexed mode, copy the index buffer
     GLintptr index_buffer_offset = 0;
     if (is_indexed) {
-        const auto& memory_manager = Core::System().GetInstance().GPU().memory_manager;
+        const auto& memory_manager = Core::System::GetInstance().GPU().memory_manager;
         const boost::optional<VAddr> index_data_addr{
             memory_manager->GpuToCpuAddress(regs.index_array.StartAddress())};
         Memory::ReadBlock(*index_data_addr, offseted_buffer, index_buffer_size);
@@ -764,7 +764,7 @@ void RasterizerOpenGL::BindFramebufferSurfaces(const Surface& color_surface,
 }
 
 void RasterizerOpenGL::SyncViewport(const MathUtil::Rectangle<u32>& surfaces_rect) {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
     const MathUtil::Rectangle<s32> viewport_rect{regs.viewport_transform[0].GetRect()};
 
     state.viewport.x = static_cast<GLint>(surfaces_rect.left) + viewport_rect.left;
@@ -782,7 +782,7 @@ void RasterizerOpenGL::SyncClipCoef() {
 }
 
 void RasterizerOpenGL::SyncCullMode() {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     state.cull.enabled = regs.cull.enabled != 0;
 
@@ -814,7 +814,7 @@ void RasterizerOpenGL::SyncDepthOffset() {
 }
 
 void RasterizerOpenGL::SyncDepthTestState() {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     state.depth.test_enabled = regs.depth_test_enable != 0;
     state.depth.write_mask = regs.depth_write_enabled ? GL_TRUE : GL_FALSE;
@@ -826,7 +826,7 @@ void RasterizerOpenGL::SyncDepthTestState() {
 }
 
 void RasterizerOpenGL::SyncBlendState() {
-    const auto& regs = Core::System().GetInstance().GPU().Maxwell3D().regs;
+    const auto& regs = Core::System::GetInstance().GPU().Maxwell3D().regs;
 
     // TODO(Subv): Support more than just render target 0.
     state.blend.enabled = regs.blend.enable[0] != 0;

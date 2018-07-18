@@ -34,7 +34,7 @@ namespace Core {
 
 class System {
 public:
-    ~System();
+    ~System() = default;
 
     /**
      * Gets the instance of the System singleton class.
@@ -164,7 +164,7 @@ public:
      * Gets a reference to the audio core.
      * @returns A reference to the emulated audio core.
      */
-    AudioCore::AudioInterface& AudioCore() { //TODO: HIER MUSS DER BUG SEIN!
+    AudioCore::AudioInterface& AudioCore() { // TODO: HIER MUSS DER BUG SEIN!
         return *audio_core;
     }
 
@@ -180,6 +180,7 @@ public:
     }
 
 private:
+    System() = default;
     /// Returns the currently running CPU core
     Cpu& CurrentCpuCore();
 
