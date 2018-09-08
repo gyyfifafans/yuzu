@@ -14,16 +14,18 @@ namespace Engines {
 class Maxwell3D;
 }
 
-class MacroInterpreter final : public MacroEngine {
+/**
+ * Holds the code that will be interpreted
+ */
+class InterpretedMacro : public CachedMacro {
 public:
-    explicit MacroInterpreter(Engines::Maxwell3D& maxwell3d);
-
+    InterpretedMacro(const std::vector<u32>& code, Engines::Maxwell3D& maxwell3d);
     /**
      * Executes the macro code with the specified input parameters.
      * @param code The macro byte code to execute
      * @param parameters The parameters of the macro
      */
-    void Execute(const std::vector<u32>& code, std::vector<u32> parameters) override;
+    void Execute(std::vector<u32> parameters) override;
 
 private:
     /// Resets the execution engine state, zeroing registers, etc.
@@ -36,20 +38,20 @@ private:
      * @param is_delay_slot Whether the current step is being executed due to a delay slot in a
      * previous instruction.
      */
-    bool Step(const std::vector<u32>& code, bool is_delay_slot);
+    bool Step(bool is_delay_slot);
 
     /// Calculates the result of an ALU operation. src_a OP src_b;
-    u32 GetALUResult(ALUOperation operation, u32 src_a, u32 src_b) const;
+    u32 GetALUResult(Macro::ALUOperation operation, u32 src_a, u32 src_b) const;
 
     /// Performs the result operation on the input result and stores it in the specified register
     /// (if necessary).
-    void ProcessResult(ResultOperation operation, u32 reg, u32 result);
+    void ProcessResult(Macro::ResultOperation operation, u32 reg, u32 result);
 
     /// Evaluates the branch condition and returns whether the branch should be taken or not.
-    bool EvaluateBranchCondition(BranchCondition cond, u32 value) const;
+    bool EvaluateBranchCondition(Macro::BranchCondition cond, u32 value) const;
 
     /// Reads an opcode at the current program counter location.
-    Opcode GetOpcode(const std::vector<u32>& code) const;
+    Macro::Opcode GetOpcode() const;
 
     /// Returns the specified register's value. Register 0 is hardcoded to always return 0.
     u32 GetRegister(u32 register_id) const;
@@ -83,11 +85,24 @@ private:
     std::array<u32, NumMacroRegisters> registers = {};
 
     /// Method address to use for the next Send instruction.
-    MethodAddress method_address = {};
+    Macro::MethodAddress method_address = {};
 
     /// Input parameters of the current macro.
     std::vector<u32> parameters;
     /// Index of the next parameter that will be fetched by the 'parm' instruction.
     u32 next_parameter_index = 0;
+
+    const std::vector<u32>& code;
+};
+
+class MacroInterpreter final : public MacroEngine {
+public:
+    explicit MacroInterpreter(Engines::Maxwell3D& maxwell3d);
+
+protected:
+    std::unique_ptr<CachedMacro> Compile(const std::vector<u32>& code) override;
+
+private:
+    Engines::Maxwell3D& maxwell3d;
 };
 } // namespace Tegra

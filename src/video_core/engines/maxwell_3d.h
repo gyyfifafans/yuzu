@@ -918,7 +918,7 @@ private:
     /// Parameters that have been submitted to the macro call so far.
     std::vector<u32> macro_params;
 
-    /// Interpreter for the macro codes uploaded to the GPU.
+    /// Runner for the macro codes uploaded to the GPU.
     std::unique_ptr<MacroEngine> macro_engine;
 
     /// Retrieves information about a specific TIC entry from the TIC buffer.
@@ -926,16 +926,6 @@ private:
 
     /// Retrieves information about a specific TSC entry from the TSC buffer.
     Texture::TSCEntry GetTSCEntry(u32 tsc_index) const;
-
-    /**
-     * Call a macro on this engine.
-     * @param method Method to call
-     * @param parameters Arguments to the method call
-     */
-    void CallMacroMethod(u32 method, std::vector<u32> parameters);
-
-    /// Handles writes to the macro uploading registers.
-    void ProcessMacroUpload(u32 data);
 
     /// Handles a write to the CLEAR_BUFFERS register.
     void ProcessClearBuffers();

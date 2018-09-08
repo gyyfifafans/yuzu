@@ -22,21 +22,6 @@ constexpr u32 MacroRegistersStart = 0xE00;
 Maxwell3D::Maxwell3D(VideoCore::RasterizerInterface& rasterizer, MemoryManager& memory_manager)
     : memory_manager(memory_manager), rasterizer{rasterizer}, macro_engine(GetMacroEngine(*this)) {}
 
-void Maxwell3D::CallMacroMethod(u32 method, std::vector<u32> parameters) {
-    // Reset the current macro.
-    executing_macro = 0;
-
-    // The requested macro must have been uploaded already.
-    auto macro_code = uploaded_macros.find(method);
-    if (macro_code == uploaded_macros.end()) {
-        LOG_ERROR(HW_GPU, "Macro {:04X} was not uploaded", method);
-        return;
-    }
-
-    // Execute the current macro.
-    macro_engine->Execute(macro_code->second, std::move(parameters));
-}
-
 void Maxwell3D::WriteReg(u32 method, u32 value, u32 remaining_params) {
     auto debug_context = Core::System::GetInstance().GetGPUDebugContext();
 
@@ -61,7 +46,9 @@ void Maxwell3D::WriteReg(u32 method, u32 value, u32 remaining_params) {
 
         // Call the macro when there are no more parameters in the command buffer
         if (remaining_params == 0) {
-            CallMacroMethod(executing_macro, std::move(macro_params));
+            u32 macro_to_execute = executing_macro;
+            executing_macro = 0;
+            macro_engine->Execute(macro_to_execute, std::move(macro_params));
         }
         return;
     }
@@ -77,7 +64,7 @@ void Maxwell3D::WriteReg(u32 method, u32 value, u32 remaining_params) {
 
     switch (method) {
     case MAXWELL3D_REG_INDEX(macros.data): {
-        ProcessMacroUpload(value);
+        macro_engine->AddCode(regs.macros.entry * 2 + MacroRegistersStart, value);
         break;
     }
     case MAXWELL3D_REG_INDEX(const_buffer.cb_data[0]):
@@ -140,12 +127,6 @@ void Maxwell3D::WriteReg(u32 method, u32 value, u32 remaining_params) {
     if (debug_context) {
         debug_context->OnEvent(Tegra::DebugContext::Event::MaxwellCommandProcessed, nullptr);
     }
-}
-
-void Maxwell3D::ProcessMacroUpload(u32 data) {
-    // Store the uploaded macro code to interpret them when they're called.
-    auto& macro = uploaded_macros[regs.macros.entry * 2 + MacroRegistersStart];
-    macro.push_back(data);
 }
 
 void Maxwell3D::ProcessQueryGet() {
