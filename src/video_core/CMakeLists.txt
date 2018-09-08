@@ -14,8 +14,8 @@ add_library(video_core STATIC
     engines/shader_bytecode.h
     gpu.cpp
     gpu.h
-    macro_interpreter.cpp
-    macro_interpreter.h
+    macro/macro_interpreter.cpp
+    macro/macro_interpreter.h
     memory_manager.cpp
     memory_manager.h
     rasterizer_cache.h
