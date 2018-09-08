@@ -919,7 +919,7 @@ private:
     std::vector<u32> macro_params;
 
     /// Interpreter for the macro codes uploaded to the GPU.
-    MacroInterpreter macro_interpreter;
+    std::unique_ptr<MacroEngine> macro_engine;
 
     /// Retrieves information about a specific TIC entry from the TIC buffer.
     Texture::TICEntry GetTICEntry(u32 tic_index) const;

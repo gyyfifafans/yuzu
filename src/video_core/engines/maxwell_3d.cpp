@@ -20,7 +20,7 @@ namespace Engines {
 constexpr u32 MacroRegistersStart = 0xE00;
 
 Maxwell3D::Maxwell3D(VideoCore::RasterizerInterface& rasterizer, MemoryManager& memory_manager)
-    : memory_manager(memory_manager), rasterizer{rasterizer}, macro_interpreter(*this) {}
+    : memory_manager(memory_manager), rasterizer{rasterizer}, macro_engine(GetMacroEngine(*this)) {}
 
 void Maxwell3D::CallMacroMethod(u32 method, std::vector<u32> parameters) {
     // Reset the current macro.
@@ -34,7 +34,7 @@ void Maxwell3D::CallMacroMethod(u32 method, std::vector<u32> parameters) {
     }
 
     // Execute the current macro.
-    macro_interpreter.Execute(macro_code->second, std::move(parameters));
+    macro_engine->Execute(macro_code->second, std::move(parameters));
 }
 
 void Maxwell3D::WriteReg(u32 method, u32 value, u32 remaining_params) {
