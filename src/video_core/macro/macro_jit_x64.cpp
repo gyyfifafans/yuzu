@@ -39,16 +39,16 @@ const JitFunction instr_table[8] = {
 
 /// Pointer to the input parameters array
 static const Reg64 PARAMETERS = r9;
-/// Index of the next parameter that the macro will use
-static const Reg32 NEXT_PARAMETER = r10d;
 /// Pointer to register array
-static const Reg32 REGISTERS = r11d;
-/// Value of the result calculated by ProcessResult
-static const Reg32 RESULT = r12d;
-/// Value of the method address
-static const Reg32 METHOD_ADDRESS = r13d;
+static const Reg64 REGISTERS = r10;
 /// Pointer to the current JitMacro state
-static const Reg64 STATE = r15;
+static const Reg64 STATE = r11;
+/// Index of the next parameter that the macro will use
+static const Reg64 NEXT_PARAMETER = r12;
+/// Value of the result calculated by ProcessResult
+static const Reg32 RESULT = r13d;
+/// Value of the method address
+static const Reg32 METHOD_ADDRESS = r14d;
 
 static const BitSet32 PERSISTENT_REGISTERS = BuildRegSet({
     PARAMETERS,
@@ -60,12 +60,13 @@ static const BitSet32 PERSISTENT_REGISTERS = BuildRegSet({
 });
 
 JitMacro::JitMacro(Engines::Maxwell3D& maxwell3d, const std::vector<u32>& code_)
-    : Xbyak::CodeGenerator(), state{maxwell3d}, code(code_) {
+    : Xbyak::CodeGenerator(MAX_CODE_SIZE), state{maxwell3d, {0}, nullptr}, code(code_) {
     Compile();
 }
 
 void JitMacro::Execute(std::vector<u32> parameters) {
-    program(&state, &parameters);
+    state.parameters = parameters.data();
+    program(&state);
 }
 
 Macro::Opcode JitMacro::GetOpcode() const {
@@ -77,8 +78,15 @@ Macro::Opcode JitMacro::GetOpcode() const {
 void JitMacro::Compile() {
     program = (CompiledMacro*)getCurr();
 
+    ABI_PushRegistersAndAdjustStack(*this, ABI_ALL_CALLEE_SAVED, 0);
+
     mov(STATE, ABI_PARAM1);
     mov(PARAMETERS, ABI_PARAM2);
+    xor_(NEXT_PARAMETER, NEXT_PARAMETER);
+    mov(REGISTERS, STATE);
+    add(REGISTERS, static_cast<Xbyak::uint32>(offsetof(JitState, registers)));
+    xor_(RESULT, RESULT);
+    xor_(METHOD_ADDRESS, METHOD_ADDRESS);
 
     bool keep_executing = true;
     while (keep_executing) {
@@ -89,7 +97,7 @@ void JitMacro::Compile() {
 }
 
 bool JitMacro::Compile_NextInstruction(bool is_delay_slot) {
-    u32 base_address = pc;
+    base_address = pc;
     Macro::Opcode opcode = GetOpcode();
     pc += 4;
 
@@ -125,8 +133,8 @@ bool JitMacro::Compile_NextInstruction(bool is_delay_slot) {
 }
 
 boost::optional<bool> JitMacro::Compile_ALU(Macro::Opcode opcode) {
-    auto src_a = Compile_GetRegister(opcode.src_a, eax);
-    auto src_b = Compile_GetRegister(opcode.src_b, ebx);
+    auto src_a = Compile_GetRegister(opcode.src_a.Value(), eax);
+    auto src_b = Compile_GetRegister(opcode.src_b.Value(), ebx);
     switch (opcode.alu_operation) {
     case Macro::ALUOperation::Add:
         add(src_a, src_b);
@@ -157,53 +165,53 @@ boost::optional<bool> JitMacro::Compile_ALU(Macro::Opcode opcode) {
         break;
     }
     mov(RESULT, src_a);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
     return boost::none;
 }
 
 boost::optional<bool> JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
-    auto result = Compile_GetRegister(opcode.src_a, RESULT);
+    auto result = Compile_GetRegister(opcode.src_a.Value(), RESULT);
     add(result, opcode.immediate);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
     return boost::none;
 }
 
 boost::optional<bool> JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
-    auto dst = Compile_GetRegister(opcode.src_a, RESULT);
-    auto src = Compile_GetRegister(opcode.src_b, eax);
+    auto dst = Compile_GetRegister(opcode.src_a.Value(), RESULT);
+    auto src = Compile_GetRegister(opcode.src_b.Value(), eax);
     // src = (src >> opcode.bf_src_bit) & opcode.GetBitfieldMask();
     // src = src << opcode.bf_dst_bit
-    shr(src, opcode.bf_src_bit);
+    shr(src, opcode.bf_src_bit.Value());
     and_(src, opcode.GetBitfieldMask());
-    shl(src, opcode.bf_dst_bit);
+    shl(src, opcode.bf_dst_bit.Value());
     // dst &= ~(opcode.GetBitfieldMask() << opcode.bf_dst_bit);
     // dst |= src;
     const u32 shift = ~(opcode.GetBitfieldMask() << opcode.bf_dst_bit);
     and_(dst, shift);
     or_(dst, src);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
     return boost::none;
 }
 
 boost::optional<bool> JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
-    auto dst = Compile_GetRegister(opcode.src_a, ecx);
-    auto src = Compile_GetRegister(opcode.src_b, RESULT);
+    auto dst = Compile_GetRegister(opcode.src_a.Value(), ecx);
+    auto src = Compile_GetRegister(opcode.src_b.Value(), RESULT);
     // result = ((src >> dst) & opcode.GetBitfieldMask()) << opcode.bf_dst_bit
     shl(src, cl);
     and_(src, opcode.GetBitfieldMask());
     sal(src, opcode.bf_dst_bit);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
     return boost::none;
 }
 
 boost::optional<bool> JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
-    auto dst = Compile_GetRegister(opcode.src_a, ecx);
-    auto src = Compile_GetRegister(opcode.src_b, RESULT);
+    auto dst = Compile_GetRegister(opcode.src_a.Value(), ecx);
+    auto src = Compile_GetRegister(opcode.src_b.Value(), RESULT);
     // result = ((src >> opcode.bf_src_bit) & opcode.GetBitfieldMask()) << dst;
     shl(src, opcode.bf_src_bit);
     and_(src, opcode.GetBitfieldMask());
     shr(src, cl);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
     return boost::none;
 }
 
@@ -224,13 +232,13 @@ boost::optional<bool> JitMacro::Compile_Read(Macro::Opcode opcode) {
     mov(ebx, STATE);
     add(ebx, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d.regs.reg_array)));
     mov(RESULT, dword[ebx + eax * 4]);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
     return boost::none;
 }
 
 boost::optional<bool> JitMacro::Compile_Branch(Macro::Opcode opcode) {
     Xbyak::Label taken, end;
-    auto value = Compile_GetRegister(opcode.src_b, eax);
+    auto value = Compile_GetRegister(opcode.src_b.Value(), eax);
     cmp(value, 0);
     switch (opcode.branch_condition) {
     case Macro::BranchCondition::Zero:
@@ -264,14 +272,14 @@ BitSet32 JitMacro::PersistentCallerSavedRegs() const {
 
 /// Moves the next parameter into edi and increments NEXT_PARAMETER
 Reg32 JitMacro::Compile_FetchParameter() {
-    mov(edi, dword[PARAMETERS + NEXT_PARAMETER * 4]);
+    mov(edi, dword[PARAMETERS + NEXT_PARAMETER * sizeof(u32)]);
     inc(NEXT_PARAMETER);
     return edi;
 }
 
 /// Copies the value of the register to the passed in register and returns it
 Reg32 JitMacro::Compile_GetRegister(u32 index, Reg32 reg) {
-    mov(reg, dword[REGISTERS + index * 4]);
+    mov(reg, dword[REGISTERS + index * sizeof(u32)]);
     return reg;
 }
 

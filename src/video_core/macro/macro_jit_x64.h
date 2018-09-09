@@ -15,8 +15,16 @@ namespace Tegra {
 /**
  * Container for all the different fields the JIT might need to access
  */
+/// MAX_* are arbitrarily chosen based on current booting games
+constexpr size_t MAX_REGISTERS = 0x10;
+constexpr size_t MAX_CODE_SIZE = 0x100000000;
 struct JitState {
+    /// Reference to the
     Engines::Maxwell3D& maxwell3d;
+    /// All emulated registers at run time.
+    std::array<u32, MAX_REGISTERS> registers;
+    /// All runtime parameters
+    u32* parameters;
 };
 
 class JitMacro : public Xbyak::CodeGenerator, public CachedMacro {
@@ -47,7 +55,7 @@ private:
     /// If the current instruction is a delay slot, store the pc here
     boost::optional<u32> delayed_pc;
     /// Result of the macro compilation
-    using CompiledMacro = void(JitState* state, const void* parameters);
+    using CompiledMacro = void(JitState* state);
     CompiledMacro* program = nullptr;
     /// Current program counter. Used during compilation
     u32 pc = 0;
