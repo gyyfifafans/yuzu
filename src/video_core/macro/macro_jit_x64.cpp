@@ -88,6 +88,8 @@ void JitMacro::Compile() {
     xor_(RESULT, RESULT);
     xor_(METHOD_ADDRESS, METHOD_ADDRESS);
 
+    instruction_labels.fill(Xbyak::Label());
+
     bool keep_executing = true;
     while (keep_executing) {
         keep_executing = Compile_NextInstruction(false);
@@ -99,6 +101,10 @@ void JitMacro::Compile() {
 bool JitMacro::Compile_NextInstruction(bool is_delay_slot) {
     base_address = pc;
     Macro::Opcode opcode = GetOpcode();
+    if (!instruction_labels[pc / 4].getAddress()) {
+        L(instruction_labels[pc / 4]);
+    }
+
     pc += 4;
 
     // Update the program counter if we were delayed
@@ -256,11 +262,14 @@ boost::optional<bool> JitMacro::Compile_Branch(Macro::Opcode opcode) {
     // Ignore the delay slot if the branch has the annul bit.
     if (opcode.branch_annul) {
         pc = base_address + opcode.GetBranchTarget();
+        jmp(instruction_labels[pc / 4]);
         return true;
     } else {
         delayed_pc = base_address + opcode.GetBranchTarget();
         // Execute one more instruction due to the delay slot.
-        return Compile_NextInstruction(true);
+        bool ret = Compile_NextInstruction(true);
+        jmp(instruction_labels[*delayed_pc / 4]);
+        return ret;
     }
     L(end);
     return boost::none;

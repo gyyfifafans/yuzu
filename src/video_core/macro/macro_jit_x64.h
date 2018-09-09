@@ -17,7 +17,7 @@ namespace Tegra {
  */
 /// MAX_* are arbitrarily chosen based on current booting games
 constexpr size_t MAX_REGISTERS = 0x10;
-constexpr size_t MAX_CODE_SIZE = 0x100000000;
+constexpr size_t MAX_CODE_SIZE = 0x1000;
 struct JitState {
     /// Reference to the
     Engines::Maxwell3D& maxwell3d;
@@ -64,6 +64,8 @@ private:
     const std::vector<u32>& code;
     /// Container for any fields the JIT may need to reference
     JitState state;
+
+    std::array<Xbyak::Label, MAX_CODE_SIZE> instruction_labels;
 };
 
 class MacroJitX64 final : public MacroEngine {
