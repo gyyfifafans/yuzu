@@ -1,0 +1,73 @@
+// Copyright 2018 yuzu Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
+#pragma once
+
+#include <memory>
+#include <unordered_map>
+#include <boost/optional.hpp>
+#include "common/x64/xbyak_abi.h"
+#include "video_core/macro/macro.h"
+
+namespace Tegra {
+
+/**
+ * Container for all the different fields the JIT might need to access
+ */
+struct JitState {
+    Engines::Maxwell3D& maxwell3d;
+};
+
+class JitMacro : public Xbyak::CodeGenerator, public CachedMacro {
+public:
+    explicit JitMacro(Engines::Maxwell3D& maxwell3d, const std::vector<u32>& code);
+
+    void Execute(std::vector<u32> parameters) override;
+
+    boost::optional<bool> Compile_ALU(Macro::Opcode);
+    boost::optional<bool> Compile_AddImmediate(Macro::Opcode);
+    boost::optional<bool> Compile_ExtractInsert(Macro::Opcode);
+    boost::optional<bool> Compile_ExtractShiftLeftImmediate(Macro::Opcode);
+    boost::optional<bool> Compile_ExtractShiftLeftRegister(Macro::Opcode);
+    boost::optional<bool> Compile_Read(Macro::Opcode);
+    boost::optional<bool> Compile_Branch(Macro::Opcode);
+
+private:
+    Macro::Opcode GetOpcode() const;
+    void Compile();
+    bool Compile_NextInstruction(bool has_delay);
+    void Compile_ProcessResult(Macro::ResultOperation operation, u32 reg);
+    void Compile_Send(Xbyak::Reg32 reg);
+    Xbyak::Reg32 Compile_FetchParameter();
+    Xbyak::Reg32 Compile_GetRegister(u32 index, Xbyak::Reg32 reg);
+
+    BitSet32 PersistentCallerSavedRegs() const;
+
+    /// If the current instruction is a delay slot, store the pc here
+    boost::optional<u32> delayed_pc;
+    /// Result of the macro compilation
+    using CompiledMacro = void(JitState* state, const void* parameters);
+    CompiledMacro* program = nullptr;
+    /// Current program counter. Used during compilation
+    u32 pc = 0;
+    u32 base_address = 0;
+    /// Reference to the code that was compiled
+    const std::vector<u32>& code;
+    /// Container for any fields the JIT may need to reference
+    JitState state;
+};
+
+class MacroJitX64 final : public MacroEngine {
+public:
+    explicit MacroJitX64(Engines::Maxwell3D& maxwell3d);
+    ~MacroJitX64() override;
+
+protected:
+    std::unique_ptr<CachedMacro> Compile(const std::vector<u32>& code) override;
+
+private:
+    Engines::Maxwell3D& maxwell3d;
+};
+
+} // namespace Tegra

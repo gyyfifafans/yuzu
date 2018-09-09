@@ -19,7 +19,7 @@ class Maxwell3D;
  */
 class InterpretedMacro : public CachedMacro {
 public:
-    InterpretedMacro(const std::vector<u32>& code, Engines::Maxwell3D& maxwell3d);
+    InterpretedMacro(Engines::Maxwell3D& maxwell3d, const std::vector<u32>& code);
     /**
      * Executes the macro code with the specified input parameters.
      * @param code The macro byte code to execute

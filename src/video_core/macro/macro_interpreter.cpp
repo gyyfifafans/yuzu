@@ -14,10 +14,10 @@ namespace Tegra {
 MacroInterpreter::MacroInterpreter(Engines::Maxwell3D& maxwell3d) : maxwell3d(maxwell3d) {}
 
 std::unique_ptr<CachedMacro> MacroInterpreter::Compile(const std::vector<u32>& code) {
-    return std::make_unique<InterpretedMacro>(code, maxwell3d);
+    return std::make_unique<InterpretedMacro>(maxwell3d, code);
 }
 
-InterpretedMacro::InterpretedMacro(const std::vector<u32>& code_, Engines::Maxwell3D& maxwell3d_)
+InterpretedMacro::InterpretedMacro(Engines::Maxwell3D& maxwell3d_, const std::vector<u32>& code_)
     : code(code_), maxwell3d(maxwell3d_) {}
 
 void InterpretedMacro::Execute(std::vector<u32> parameters) {

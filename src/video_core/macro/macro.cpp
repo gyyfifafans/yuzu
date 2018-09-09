@@ -6,6 +6,12 @@
 #include "video_core/macro/macro.h"
 #include "video_core/macro/macro_interpreter.h"
 
+#ifdef ARCHITECTURE_x86_64
+#include "video_core/macro/macro_jit_x64.h"
+#endif
+
+#pragma optimize("", off)
+
 namespace Tegra {
 
 void MacroEngine::AddCode(const u32 method, u32 data) {
@@ -30,7 +36,11 @@ void MacroEngine::Execute(const u32 method, std::vector<u32> parameters) {
 } // namespace Tegra
 
 std::unique_ptr<MacroEngine> GetMacroEngine(Engines::Maxwell3D& maxwell3d) {
+#ifdef ARCHITECTURE_x86_64
+    return std::move(std::make_unique<MacroJitX64>(maxwell3d));
+#else
     return std::move(std::make_unique<MacroInterpreter>(maxwell3d));
+#endif // ARCHITECTURE_x86_64
 }
 
 } // namespace Tegra
