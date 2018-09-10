@@ -17,10 +17,10 @@ namespace Tegra {
  */
 /// MAX_* are arbitrarily chosen based on current booting games
 constexpr size_t MAX_REGISTERS = 0x10;
-constexpr size_t MAX_CODE_SIZE = 0x1000;
+constexpr size_t MAX_CODE_SIZE = 0x10000;
 struct JitState {
     /// Reference to the
-    Engines::Maxwell3D& maxwell3d;
+    Engines::Maxwell3D* maxwell3d;
     /// All emulated registers at run time.
     std::array<u32, MAX_REGISTERS> registers;
     /// All runtime parameters
@@ -33,18 +33,18 @@ public:
 
     void Execute(std::vector<u32> parameters) override;
 
-    boost::optional<bool> Compile_ALU(Macro::Opcode);
-    boost::optional<bool> Compile_AddImmediate(Macro::Opcode);
-    boost::optional<bool> Compile_ExtractInsert(Macro::Opcode);
-    boost::optional<bool> Compile_ExtractShiftLeftImmediate(Macro::Opcode);
-    boost::optional<bool> Compile_ExtractShiftLeftRegister(Macro::Opcode);
-    boost::optional<bool> Compile_Read(Macro::Opcode);
-    boost::optional<bool> Compile_Branch(Macro::Opcode);
+    void Compile_ALU(Macro::Opcode);
+    void Compile_AddImmediate(Macro::Opcode);
+    void Compile_ExtractInsert(Macro::Opcode);
+    void Compile_ExtractShiftLeftImmediate(Macro::Opcode);
+    void Compile_ExtractShiftLeftRegister(Macro::Opcode);
+    void Compile_Read(Macro::Opcode);
+    void Compile_Branch(Macro::Opcode);
 
 private:
     Macro::Opcode GetOpcode() const;
     void Compile();
-    bool Compile_NextInstruction(bool has_delay);
+    bool Compile_NextInstruction();
     void Compile_ProcessResult(Macro::ResultOperation operation, u32 reg);
     void Compile_Send(Xbyak::Reg32 reg);
     Xbyak::Reg32 Compile_FetchParameter();
@@ -59,7 +59,6 @@ private:
     CompiledMacro* program = nullptr;
     /// Current program counter. Used during compilation
     u32 pc = 0;
-    u32 base_address = 0;
     /// Reference to the code that was compiled
     const std::vector<u32>& code;
     /// Container for any fields the JIT may need to reference

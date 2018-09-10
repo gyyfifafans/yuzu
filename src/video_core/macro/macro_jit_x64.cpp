@@ -20,7 +20,7 @@ using Xbyak::Xmm;
 
 namespace Tegra {
 
-typedef boost::optional<bool> (JitMacro::*JitFunction)(Macro::Opcode opcode);
+typedef void (JitMacro::*JitFunction)(Macro::Opcode opcode);
 
 const JitFunction instr_table[8] = {
     &JitMacro::Compile_ALU,
@@ -60,7 +60,7 @@ static const BitSet32 PERSISTENT_REGISTERS = BuildRegSet({
 });
 
 JitMacro::JitMacro(Engines::Maxwell3D& maxwell3d, const std::vector<u32>& code_)
-    : Xbyak::CodeGenerator(MAX_CODE_SIZE), state{maxwell3d, {0}, nullptr}, code(code_) {
+    : Xbyak::CodeGenerator(MAX_CODE_SIZE), state{&maxwell3d, {0}, nullptr}, code(code_) {
     Compile();
 }
 
@@ -78,12 +78,13 @@ Macro::Opcode JitMacro::GetOpcode() const {
 void JitMacro::Compile() {
     program = (CompiledMacro*)getCurr();
 
-    ABI_PushRegistersAndAdjustStack(*this, ABI_ALL_CALLEE_SAVED, 0);
+    ABI_PushRegistersAndAdjustStack(*this, ABI_ALL_CALLEE_SAVED, 8);
 
     mov(STATE, ABI_PARAM1);
-    mov(PARAMETERS, ABI_PARAM2);
+    mov(PARAMETERS, ABI_PARAM1);
+    add(PARAMETERS, static_cast<Xbyak::uint32>(offsetof(JitState, parameters)));
     xor_(NEXT_PARAMETER, NEXT_PARAMETER);
-    mov(REGISTERS, STATE);
+    mov(REGISTERS, ABI_PARAM1);
     add(REGISTERS, static_cast<Xbyak::uint32>(offsetof(JitState, registers)));
     xor_(RESULT, RESULT);
     xor_(METHOD_ADDRESS, METHOD_ADDRESS);
@@ -92,35 +93,22 @@ void JitMacro::Compile() {
 
     bool keep_executing = true;
     while (keep_executing) {
-        keep_executing = Compile_NextInstruction(false);
+        keep_executing = Compile_NextInstruction();
     }
 
     ready();
 }
 
-bool JitMacro::Compile_NextInstruction(bool is_delay_slot) {
-    base_address = pc;
+bool JitMacro::Compile_NextInstruction() {
     Macro::Opcode opcode = GetOpcode();
-    if (!instruction_labels[pc / 4].getAddress()) {
-        L(instruction_labels[pc / 4]);
-    }
+    L(instruction_labels[pc / 4]);
 
     pc += 4;
-
-    // Update the program counter if we were delayed
-    if (delayed_pc != boost::none) {
-        ASSERT(is_delay_slot);
-        pc = *delayed_pc;
-        delayed_pc = boost::none;
-    }
 
     auto instr_func = instr_table[static_cast<u32>(opcode.operation.Value())];
 
     if (instr_func) {
-        auto ret = ((*this).*instr_func)(opcode);
-        if (ret) {
-            return *ret;
-        }
+        ((*this).*instr_func)(opcode);
     } else {
         // Unhandled instruction
         LOG_CRITICAL(HW_GPU, "Unhandled macro jit instruction: 0x{:02x} (0x{:04x})",
@@ -131,14 +119,14 @@ bool JitMacro::Compile_NextInstruction(bool is_delay_slot) {
         // Exit has a delay slot, execute the next instruction
         // Note: Executing an exit during a branch delay slot will cause the instruction at the
         // branch target to be executed before exiting.
-        Compile_NextInstruction(true);
+        Compile_NextInstruction();
         return false;
     }
 
     return true;
 }
 
-boost::optional<bool> JitMacro::Compile_ALU(Macro::Opcode opcode) {
+void JitMacro::Compile_ALU(Macro::Opcode opcode) {
     auto src_a = Compile_GetRegister(opcode.src_a.Value(), eax);
     auto src_b = Compile_GetRegister(opcode.src_b.Value(), ebx);
     switch (opcode.alu_operation) {
@@ -172,17 +160,15 @@ boost::optional<bool> JitMacro::Compile_ALU(Macro::Opcode opcode) {
     }
     mov(RESULT, src_a);
     Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
-    return boost::none;
 }
 
-boost::optional<bool> JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
+void JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
     auto result = Compile_GetRegister(opcode.src_a.Value(), RESULT);
     add(result, opcode.immediate);
     Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
-    return boost::none;
 }
 
-boost::optional<bool> JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
+void JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
     auto dst = Compile_GetRegister(opcode.src_a.Value(), RESULT);
     auto src = Compile_GetRegister(opcode.src_b.Value(), eax);
     // src = (src >> opcode.bf_src_bit) & opcode.GetBitfieldMask();
@@ -196,10 +182,9 @@ boost::optional<bool> JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
     and_(dst, shift);
     or_(dst, src);
     Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
-    return boost::none;
 }
 
-boost::optional<bool> JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
+void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
     auto dst = Compile_GetRegister(opcode.src_a.Value(), ecx);
     auto src = Compile_GetRegister(opcode.src_b.Value(), RESULT);
     // result = ((src >> dst) & opcode.GetBitfieldMask()) << opcode.bf_dst_bit
@@ -207,10 +192,9 @@ boost::optional<bool> JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode 
     and_(src, opcode.GetBitfieldMask());
     sal(src, opcode.bf_dst_bit);
     Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
-    return boost::none;
 }
 
-boost::optional<bool> JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
+void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
     auto dst = Compile_GetRegister(opcode.src_a.Value(), ecx);
     auto src = Compile_GetRegister(opcode.src_b.Value(), RESULT);
     // result = ((src >> opcode.bf_src_bit) & opcode.GetBitfieldMask()) << dst;
@@ -218,10 +202,9 @@ boost::optional<bool> JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode o
     and_(src, opcode.GetBitfieldMask());
     shr(src, cl);
     Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
-    return boost::none;
 }
 
-boost::optional<bool> JitMacro::Compile_Read(Macro::Opcode opcode) {
+void JitMacro::Compile_Read(Macro::Opcode opcode) {
     // TODO: avoid ABI overhead by putting a pointer to the engine's registers in STATE
     // ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // mov(ABI_PARAM1, STATE);
@@ -236,13 +219,12 @@ boost::optional<bool> JitMacro::Compile_Read(Macro::Opcode opcode) {
     add(eax, opcode.immediate);
     // Load the value of that register into result
     mov(ebx, STATE);
-    add(ebx, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d.regs.reg_array)));
+    add(ebx, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d->regs.reg_array)));
     mov(RESULT, dword[ebx + eax * 4]);
     Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
-    return boost::none;
 }
 
-boost::optional<bool> JitMacro::Compile_Branch(Macro::Opcode opcode) {
+void JitMacro::Compile_Branch(Macro::Opcode opcode) {
     Xbyak::Label taken, end;
     auto value = Compile_GetRegister(opcode.src_b.Value(), eax);
     cmp(value, 0);
@@ -260,19 +242,13 @@ boost::optional<bool> JitMacro::Compile_Branch(Macro::Opcode opcode) {
     // Branch was taken
     L(taken);
     // Ignore the delay slot if the branch has the annul bit.
-    if (opcode.branch_annul) {
-        pc = base_address + opcode.GetBranchTarget();
-        jmp(instruction_labels[pc / 4]);
-        return true;
-    } else {
-        delayed_pc = base_address + opcode.GetBranchTarget();
+    s32 jump_address = pc + opcode.GetBranchTarget();
+    if (!opcode.branch_annul) {
         // Execute one more instruction due to the delay slot.
-        bool ret = Compile_NextInstruction(true);
-        jmp(instruction_labels[*delayed_pc / 4]);
-        return ret;
+        Compile_NextInstruction();
     }
+    jmp(instruction_labels[jump_address / 4], T_NEAR);
     L(end);
-    return boost::none;
 }
 
 BitSet32 JitMacro::PersistentCallerSavedRegs() const {
@@ -354,8 +330,9 @@ static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
 
 void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
     ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    // The first member of the struct is the maxwell3d pointer, so we dont move the param
     mov(ABI_PARAM1, STATE);
-    add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
+    // add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
     mov(ABI_PARAM2, METHOD_ADDRESS);
     mov(ABI_PARAM3, reg);
     CallFarFunction(*this, Send);
