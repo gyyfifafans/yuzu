@@ -16,6 +16,8 @@ class Maxwell3D;
 }
 
 namespace Macro {
+
+static constexpr size_t NumMacroRegisters = 8;
 enum class Operation : u32 {
     ALU = 0,
     AddImmediate = 1,

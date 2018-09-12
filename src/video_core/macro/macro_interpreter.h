@@ -79,10 +79,8 @@ private:
     /// Program counter to execute at after the delay slot is executed.
     boost::optional<u32> delayed_pc;
 
-    static constexpr size_t NumMacroRegisters = 8;
-
     /// General purpose macro registers.
-    std::array<u32, NumMacroRegisters> registers = {};
+    std::array<u32, Macro::NumMacroRegisters> registers = {};
 
     /// Method address to use for the next Send instruction.
     Macro::MethodAddress method_address = {};

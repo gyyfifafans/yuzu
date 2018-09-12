@@ -96,6 +96,8 @@ void JitMacro::Compile() {
         keep_executing = Compile_NextInstruction();
     }
 
+    ABI_PopRegistersAndAdjustStack(*this, ABI_ALL_CALLEE_SAVED, 8);
+    ret();
     ready();
 }
 
@@ -127,8 +129,8 @@ bool JitMacro::Compile_NextInstruction() {
 }
 
 void JitMacro::Compile_ALU(Macro::Opcode opcode) {
-    auto src_a = Compile_GetRegister(opcode.src_a.Value(), eax);
-    auto src_b = Compile_GetRegister(opcode.src_b.Value(), ebx);
+    auto src_a = Compile_GetRegister(opcode.src_a, eax);
+    auto src_b = Compile_GetRegister(opcode.src_b, ebx);
     switch (opcode.alu_operation) {
     case Macro::ALUOperation::Add:
         add(src_a, src_b);
@@ -159,49 +161,49 @@ void JitMacro::Compile_ALU(Macro::Opcode opcode) {
         break;
     }
     mov(RESULT, src_a);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
+    Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
-    auto result = Compile_GetRegister(opcode.src_a.Value(), RESULT);
+    auto result = Compile_GetRegister(opcode.src_a, RESULT);
     add(result, opcode.immediate);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
+    Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
-    auto dst = Compile_GetRegister(opcode.src_a.Value(), RESULT);
-    auto src = Compile_GetRegister(opcode.src_b.Value(), eax);
+    auto dst = Compile_GetRegister(opcode.src_a, RESULT);
+    auto src = Compile_GetRegister(opcode.src_b, eax);
     // src = (src >> opcode.bf_src_bit) & opcode.GetBitfieldMask();
     // src = src << opcode.bf_dst_bit
-    shr(src, opcode.bf_src_bit.Value());
+    shr(src, opcode.bf_src_bit);
     and_(src, opcode.GetBitfieldMask());
-    shl(src, opcode.bf_dst_bit.Value());
+    shl(src, opcode.bf_dst_bit);
     // dst &= ~(opcode.GetBitfieldMask() << opcode.bf_dst_bit);
     // dst |= src;
     const u32 shift = ~(opcode.GetBitfieldMask() << opcode.bf_dst_bit);
     and_(dst, shift);
     or_(dst, src);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
+    Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
-    auto dst = Compile_GetRegister(opcode.src_a.Value(), ecx);
-    auto src = Compile_GetRegister(opcode.src_b.Value(), RESULT);
+    auto dst = Compile_GetRegister(opcode.src_a, ecx);
+    auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> dst) & opcode.GetBitfieldMask()) << opcode.bf_dst_bit
     shl(src, cl);
     and_(src, opcode.GetBitfieldMask());
     sal(src, opcode.bf_dst_bit);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
+    Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
-    auto dst = Compile_GetRegister(opcode.src_a.Value(), ecx);
-    auto src = Compile_GetRegister(opcode.src_b.Value(), RESULT);
+    auto dst = Compile_GetRegister(opcode.src_a, ecx);
+    auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> opcode.bf_src_bit) & opcode.GetBitfieldMask()) << dst;
     shl(src, opcode.bf_src_bit);
     and_(src, opcode.GetBitfieldMask());
     shr(src, cl);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
+    Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_Read(Macro::Opcode opcode) {
@@ -214,19 +216,20 @@ void JitMacro::Compile_Read(Macro::Opcode opcode) {
     // ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // mov(REGISTERS, dword[ABI_RETURN]);
 
-    // Load into eax the register that we want to read
-    mov(eax, dword[REGISTERS + opcode.src_a * 4]);
+    // Load into rax the value of the register that we want to read
+    Compile_GetRegister(opcode.src_a, eax);
     add(eax, opcode.immediate);
+    mov(eax, eax);
     // Load the value of that register into result
-    mov(ebx, STATE);
-    add(ebx, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d->regs.reg_array)));
-    mov(RESULT, dword[ebx + eax * 4]);
-    Compile_ProcessResult(opcode.result_operation, opcode.dst.Value());
+    mov(rbx, qword[STATE]);
+    add(rbx, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d->regs.reg_array)));
+    mov(RESULT, dword[rbx + rax * 4]);
+    Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_Branch(Macro::Opcode opcode) {
     Xbyak::Label taken, end;
-    auto value = Compile_GetRegister(opcode.src_b.Value(), eax);
+    auto value = Compile_GetRegister(opcode.src_b, eax);
     cmp(value, 0);
     switch (opcode.branch_condition) {
     case Macro::BranchCondition::Zero:
@@ -329,14 +332,16 @@ static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
 }
 
 void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
-    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 8);
     // The first member of the struct is the maxwell3d pointer, so we dont move the param
-    mov(ABI_PARAM1, STATE);
+    mov(ABI_PARAM1, qword[STATE]);
     // add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
     mov(ABI_PARAM2, METHOD_ADDRESS);
+    // the address field is only the 12 highest bits so shift out the others
+    shr(ABI_PARAM2, 20);
     mov(ABI_PARAM3, reg);
     CallFarFunction(*this, Send);
-    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 8);
     // Increment method_address address bits by the increment amount
     // method_address (u32): xx xx xx xx xx xx yy yy yy 00 00 00 00 00 00 00
     // x = address bits

@@ -15,14 +15,13 @@ namespace Tegra {
 /**
  * Container for all the different fields the JIT might need to access
  */
-/// MAX_* are arbitrarily chosen based on current booting games
-constexpr size_t MAX_REGISTERS = 0x10;
+/// MAX_CODE_SIZE is arbitrarily chosen based on current booting games
 constexpr size_t MAX_CODE_SIZE = 0x10000;
 struct JitState {
     /// Reference to the
     Engines::Maxwell3D* maxwell3d;
     /// All emulated registers at run time.
-    std::array<u32, MAX_REGISTERS> registers;
+    std::array<u32, Macro::NumMacroRegisters> registers;
     /// All runtime parameters
     u32* parameters;
 };

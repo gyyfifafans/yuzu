@@ -13,6 +13,7 @@
 #include "video_core/renderer_base.h"
 #include "video_core/textures/texture.h"
 
+#pragma optimize("", off)
 namespace Tegra {
 namespace Engines {
 
