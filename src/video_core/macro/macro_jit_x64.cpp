@@ -190,9 +190,9 @@ void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
     auto dst = Compile_GetRegister(opcode.src_a, ecx);
     auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> dst) & opcode.GetBitfieldMask()) << opcode.bf_dst_bit
-    shl(src, cl);
+    shr(src, cl);
     and_(src, opcode.GetBitfieldMask());
-    sal(src, opcode.bf_dst_bit);
+    shl(src, opcode.bf_dst_bit);
     Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
@@ -200,9 +200,9 @@ void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
     auto dst = Compile_GetRegister(opcode.src_a, ecx);
     auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> opcode.bf_src_bit) & opcode.GetBitfieldMask()) << dst;
-    shl(src, opcode.bf_src_bit);
+    shr(src, opcode.bf_src_bit);
     and_(src, opcode.GetBitfieldMask());
-    shr(src, cl);
+    shl(src, cl);
     Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
@@ -230,7 +230,7 @@ void JitMacro::Compile_Read(Macro::Opcode opcode) {
 
 void JitMacro::Compile_Branch(Macro::Opcode opcode) {
     Xbyak::Label taken, end;
-    auto value = Compile_GetRegister(opcode.src_b, eax);
+    auto value = Compile_GetRegister(opcode.src_a, eax);
     cmp(value, 0);
     switch (opcode.branch_condition) {
     case Macro::BranchCondition::Zero:
@@ -246,7 +246,7 @@ void JitMacro::Compile_Branch(Macro::Opcode opcode) {
     // Branch was taken
     L(taken);
     // Ignore the delay slot if the branch has the annul bit.
-    s32 jump_address = pc + opcode.GetBranchTarget();
+    s32 jump_address = pc + opcode.GetBranchTarget() - 4;
     if (!opcode.branch_annul) {
         // Execute one more instruction due to the delay slot.
         Compile_NextInstruction();
@@ -274,10 +274,7 @@ Reg32 JitMacro::Compile_GetRegister(u32 index, Reg32 reg) {
 
 void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) {
     auto SetRegister = [&](Reg32 result) { mov(dword[REGISTERS + reg * sizeof(u32)], result); };
-    auto SetMethodAddress = [&] {
-        db(0xcc);
-        mov(METHOD_ADDRESS, RESULT);
-    };
+    auto SetMethodAddress = [&] { mov(METHOD_ADDRESS, RESULT); };
     switch (operation) {
     case Macro::ResultOperation::IgnoreAndFetch:
         // Fetch parameter and ignore result.
@@ -300,7 +297,7 @@ void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) 
     case Macro::ResultOperation::MoveAndSend:
         // Move and send result.
         SetRegister(RESULT);
-        Compile_Send(RESULT);
+        Compile_Send(eax);
         break;
     case Macro::ResultOperation::FetchAndSetMethod:
         // Fetch parameter and use result as Method Address.
@@ -317,9 +314,10 @@ void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) 
         // Move result and use as Method Address, then send bits 12:17 of result.
         SetRegister(RESULT);
         SetMethodAddress();
-        sar(RESULT, 12);
-        and_(RESULT, 0b111111);
-        Compile_Send(RESULT);
+        mov(eax, RESULT);
+        sar(eax, 12);
+        and_(eax, 0b11'1111);
+        Compile_Send(eax);
         break;
     default:
         UNIMPLEMENTED_MSG("Unimplemented result operation {}", static_cast<u32>(operation));
@@ -331,7 +329,7 @@ static void Send(Engines::Maxwell3D* maxwell3d, u32 method_address, u32 value) {
     ma.raw = method_address;
     LOG_CRITICAL(HW_GPU, "address: {:x} increment: {:x} value: {}", static_cast<u32>(ma.address),
                  static_cast<u32>(ma.increment), value);
-    maxwell3d->WriteReg(method_address, value, 0);
+    maxwell3d->WriteReg(ma.address, value, 0);
 }
 
 static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
@@ -345,19 +343,18 @@ void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
     mov(ABI_PARAM1, qword[STATE]);
     // add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
     mov(ABI_PARAM2, METHOD_ADDRESS);
-    db(0xcc);
-    // the address field is only the 12 highest bits so shift out the others
-    shr(ABI_PARAM2, 20);
+    // the address field is only the 12 highest bits mask the others
+    // and_(ABI_PARAM2, 0b1111'1111'1111);
     mov(ABI_PARAM3, reg);
     CallFarFunction(*this, Send);
     ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // Increment method_address address bits by the increment amount
-    // method_address (u32): xx xx xx xx xx xx yy yy yy 00 00 00 00 00 00 00
+    // method_address (u32): 0000 0000 0000 00yy yyyy xxxx xxxx xxxx
     // x = address bits
     // y = increment bits
     mov(eax, METHOD_ADDRESS);
-    shl(eax, 6);
-    and_(eax, 0b111111 << 20);
+    shr(eax, 12);
+    and_(eax, 0b11'1111);
     add(METHOD_ADDRESS, eax);
 }
 
