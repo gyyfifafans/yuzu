@@ -297,7 +297,7 @@ void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) 
     case Macro::ResultOperation::MoveAndSend:
         // Move and send result.
         SetRegister(RESULT);
-        Compile_Send(eax);
+        Compile_Send(RESULT);
         break;
     case Macro::ResultOperation::FetchAndSetMethod:
         // Fetch parameter and use result as Method Address.
