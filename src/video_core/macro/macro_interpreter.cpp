@@ -243,6 +243,9 @@ void InterpretedMacro::SetMethodAddress(u32 address) {
 }
 
 void InterpretedMacro::Send(u32 value) {
+    LOG_CRITICAL(HW_GPU, "address: {:x} increment: {:x} value: {}",
+                 static_cast<u32>(method_address.address),
+                 static_cast<u32>(method_address.increment), value);
     maxwell3d.WriteReg(method_address.address, value, 0);
     // Increment the method address by the method increment.
     method_address.address.Assign(method_address.address.Value() +

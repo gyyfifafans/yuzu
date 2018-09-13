@@ -85,10 +85,8 @@ private:
                 }
             };
             while (true) {
-                {
-                    std::unique_lock<std::mutex> lock(message_mutex);
-                    message_cv.wait(lock, [&] { return !running || message_queue.Pop(entry); });
-                }
+                std::unique_lock<std::mutex> lock(message_mutex);
+                message_cv.wait(lock, [&] { return !running || message_queue.Pop(entry); });
                 if (!running) {
                     break;
                 }

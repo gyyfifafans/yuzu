@@ -37,8 +37,8 @@ void MacroEngine::Execute(u32 method, std::vector<u32> parameters) {
 
 std::unique_ptr<MacroEngine> GetMacroEngine(Engines::Maxwell3D& maxwell3d) {
 #ifdef ARCHITECTURE_x86_64
-    return std::move(std::make_unique<MacroInterpreter>(maxwell3d));
-    // return std::move(std::make_unique<MacroJitX64>(maxwell3d));
+    // return std::move(std::make_unique<MacroInterpreter>(maxwell3d));
+    return std::move(std::make_unique<MacroJitX64>(maxwell3d));
 #else
     return std::move(std::make_unique<MacroInterpreter>(maxwell3d));
 #endif // ARCHITECTURE_x86_64

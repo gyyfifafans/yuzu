@@ -219,6 +219,7 @@ void JitMacro::Compile_Read(Macro::Opcode opcode) {
     // Load into rax the value of the register that we want to read
     Compile_GetRegister(opcode.src_a, eax);
     add(eax, opcode.immediate);
+    // clear the upper 32 bits of rax
     mov(eax, eax);
     // Load the value of that register into result
     mov(rbx, qword[STATE]);
@@ -265,15 +266,18 @@ Reg32 JitMacro::Compile_FetchParameter() {
     return edi;
 }
 
-/// Copies the value of the register to the passed in register and returns it
+/// Copies the value of the guest register to the passed in host register and returns it
 Reg32 JitMacro::Compile_GetRegister(u32 index, Reg32 reg) {
     mov(reg, dword[REGISTERS + index * sizeof(u32)]);
     return reg;
 }
 
 void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) {
-    auto SetRegister = [&](Reg32 result) { mov(dword[REGISTERS + reg * 4], result); };
-    auto SetMethodAddress = [&] { mov(METHOD_ADDRESS, RESULT); };
+    auto SetRegister = [&](Reg32 result) { mov(dword[REGISTERS + reg * sizeof(u32)], result); };
+    auto SetMethodAddress = [&] {
+        db(0xcc);
+        mov(METHOD_ADDRESS, RESULT);
+    };
     switch (operation) {
     case Macro::ResultOperation::IgnoreAndFetch:
         // Fetch parameter and ignore result.
@@ -323,6 +327,10 @@ void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) 
 }
 
 static void Send(Engines::Maxwell3D* maxwell3d, u32 method_address, u32 value) {
+    Macro::MethodAddress ma;
+    ma.raw = method_address;
+    LOG_CRITICAL(HW_GPU, "address: {:x} increment: {:x} value: {}", static_cast<u32>(ma.address),
+                 static_cast<u32>(ma.increment), value);
     maxwell3d->WriteReg(method_address, value, 0);
 }
 
@@ -332,16 +340,17 @@ static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
 }
 
 void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
-    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 8);
+    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // The first member of the struct is the maxwell3d pointer, so we dont move the param
     mov(ABI_PARAM1, qword[STATE]);
     // add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
     mov(ABI_PARAM2, METHOD_ADDRESS);
+    db(0xcc);
     // the address field is only the 12 highest bits so shift out the others
     shr(ABI_PARAM2, 20);
     mov(ABI_PARAM3, reg);
     CallFarFunction(*this, Send);
-    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 8);
+    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // Increment method_address address bits by the increment amount
     // method_address (u32): xx xx xx xx xx xx yy yy yy 00 00 00 00 00 00 00
     // x = address bits
