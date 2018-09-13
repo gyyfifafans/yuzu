@@ -129,6 +129,7 @@ bool JitMacro::Compile_NextInstruction() {
 }
 
 void JitMacro::Compile_ALU(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     auto src_a = Compile_GetRegister(opcode.src_a, eax);
     auto src_b = Compile_GetRegister(opcode.src_b, ebx);
     switch (opcode.alu_operation) {
@@ -165,12 +166,14 @@ void JitMacro::Compile_ALU(Macro::Opcode opcode) {
 }
 
 void JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     auto result = Compile_GetRegister(opcode.src_a, RESULT);
     add(result, opcode.immediate);
     Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     auto dst = Compile_GetRegister(opcode.src_a, RESULT);
     auto src = Compile_GetRegister(opcode.src_b, eax);
     // src = (src >> opcode.bf_src_bit) & opcode.GetBitfieldMask();
@@ -187,6 +190,7 @@ void JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
 }
 
 void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     auto dst = Compile_GetRegister(opcode.src_a, ecx);
     auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> dst) & opcode.GetBitfieldMask()) << opcode.bf_dst_bit
@@ -197,6 +201,7 @@ void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
 }
 
 void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     auto dst = Compile_GetRegister(opcode.src_a, ecx);
     auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> opcode.bf_src_bit) & opcode.GetBitfieldMask()) << dst;
@@ -207,6 +212,7 @@ void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
 }
 
 void JitMacro::Compile_Read(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     // TODO: avoid ABI overhead by putting a pointer to the engine's registers in STATE
     // ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // mov(ABI_PARAM1, STATE);
@@ -229,6 +235,7 @@ void JitMacro::Compile_Read(Macro::Opcode opcode) {
 }
 
 void JitMacro::Compile_Branch(Macro::Opcode opcode) {
+    LOG_CRITICAL(HW_GPU, "");
     Xbyak::Label taken, end;
     auto value = Compile_GetRegister(opcode.src_a, eax);
     cmp(value, 0);
@@ -268,12 +275,25 @@ Reg32 JitMacro::Compile_FetchParameter() {
 
 /// Copies the value of the guest register to the passed in host register and returns it
 Reg32 JitMacro::Compile_GetRegister(u32 index, Reg32 reg) {
-    mov(reg, dword[REGISTERS + index * sizeof(u32)]);
+    // Register 0 is supposed to always return 0.
+    if (index == 0) {
+        xor_(reg, reg);
+    } else {
+        mov(reg, dword[REGISTERS + index * sizeof(u32)]);
+    }
+
     return reg;
 }
 
 void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) {
-    auto SetRegister = [&](Reg32 result) { mov(dword[REGISTERS + reg * sizeof(u32)], result); };
+    auto SetRegister = [&](Reg32 result) {
+        // Register 0 is supposed to always return 0. NOP is implemented as a store to the zero
+        // register.
+        if (reg == 0) {
+            return;
+        }
+        mov(dword[REGISTERS + reg * sizeof(u32)], result);
+    };
     auto SetMethodAddress = [&] { mov(METHOD_ADDRESS, RESULT); };
     switch (operation) {
     case Macro::ResultOperation::IgnoreAndFetch:
@@ -338,6 +358,7 @@ static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
 }
 
 void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
+    LOG_CRITICAL(HW_GPU, "");
     ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // The first member of the struct is the maxwell3d pointer, so we dont move the param
     mov(ABI_PARAM1, qword[STATE]);
@@ -355,6 +376,7 @@ void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
     mov(eax, METHOD_ADDRESS);
     shr(eax, 12);
     and_(eax, 0b11'1111);
+    // TODO: fix me. this can overflow
     add(METHOD_ADDRESS, eax);
 }
 
