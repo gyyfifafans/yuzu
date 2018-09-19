@@ -97,6 +97,7 @@ union MethodAddress {
 
 class CachedMacro {
 public:
+    virtual ~CachedMacro() = default;
     /**
      * Executes the macro code with the specified input parameters.
      * @param code The macro byte code to execute

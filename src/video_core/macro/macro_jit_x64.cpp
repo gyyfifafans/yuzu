@@ -79,15 +79,18 @@ void JitMacro::Compile() {
     program = (CompiledMacro*)getCurr();
 
     ABI_PushRegistersAndAdjustStack(*this, ABI_ALL_CALLEE_SAVED, 8);
-
-    mov(STATE, ABI_PARAM1);
-    mov(PARAMETERS, ABI_PARAM1);
-    add(PARAMETERS, static_cast<Xbyak::uint32>(offsetof(JitState, parameters)));
-    xor_(NEXT_PARAMETER, NEXT_PARAMETER);
+    // db(0xcc);
+    mov(STATE, qword[ABI_PARAM1]);
+    mov(PARAMETERS, qword[ABI_PARAM1 + static_cast<Xbyak::uint32>(offsetof(JitState, parameters))]);
     mov(REGISTERS, ABI_PARAM1);
     add(REGISTERS, static_cast<Xbyak::uint32>(offsetof(JitState, registers)));
+    // Clear out any other registers, todo is this needed?
     xor_(RESULT, RESULT);
     xor_(METHOD_ADDRESS, METHOD_ADDRESS);
+    xor_(NEXT_PARAMETER, NEXT_PARAMETER);
+
+    // register 0 should contain the first parameter and the next parameter starts at 1
+    mov(dword[REGISTERS], Compile_FetchParameter());
 
     instruction_labels.fill(Xbyak::Label());
 
@@ -130,6 +133,7 @@ bool JitMacro::Compile_NextInstruction() {
 
 void JitMacro::Compile_ALU(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    // db(0xcc);
     auto src_a = Compile_GetRegister(opcode.src_a, eax);
     auto src_b = Compile_GetRegister(opcode.src_b, ebx);
     switch (opcode.alu_operation) {
@@ -167,6 +171,7 @@ void JitMacro::Compile_ALU(Macro::Opcode opcode) {
 
 void JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    // db(0xcc);
     auto result = Compile_GetRegister(opcode.src_a, RESULT);
     add(result, opcode.immediate);
     Compile_ProcessResult(opcode.result_operation, opcode.dst);
@@ -174,6 +179,7 @@ void JitMacro::Compile_AddImmediate(Macro::Opcode opcode) {
 
 void JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    // db(0xcc);
     auto dst = Compile_GetRegister(opcode.src_a, RESULT);
     auto src = Compile_GetRegister(opcode.src_b, eax);
     // src = (src >> opcode.bf_src_bit) & opcode.GetBitfieldMask();
@@ -191,6 +197,7 @@ void JitMacro::Compile_ExtractInsert(Macro::Opcode opcode) {
 
 void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    // db(0xcc);
     auto dst = Compile_GetRegister(opcode.src_a, ecx);
     auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> dst) & opcode.GetBitfieldMask()) << opcode.bf_dst_bit
@@ -202,6 +209,7 @@ void JitMacro::Compile_ExtractShiftLeftImmediate(Macro::Opcode opcode) {
 
 void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    // db(0xcc);
     auto dst = Compile_GetRegister(opcode.src_a, ecx);
     auto src = Compile_GetRegister(opcode.src_b, RESULT);
     // result = ((src >> opcode.bf_src_bit) & opcode.GetBitfieldMask()) << dst;
@@ -211,31 +219,38 @@ void JitMacro::Compile_ExtractShiftLeftRegister(Macro::Opcode opcode) {
     Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
+static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
+    maxwell3d->regs.reg_array[method];
+    return maxwell3d->GetRegisterValue(method);
+}
+
 void JitMacro::Compile_Read(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    // db(0xcc);
     // TODO: avoid ABI overhead by putting a pointer to the engine's registers in STATE
-    // ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
-    // mov(ABI_PARAM1, STATE);
-    // add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
-    // mov(ABI_PARAM2, METHOD_ADDRESS);
-    // CallFarFunction(*this, Read);
-    // ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
-    // mov(REGISTERS, dword[ABI_RETURN]);
-
-    // Load into rax the value of the register that we want to read
-    Compile_GetRegister(opcode.src_a, eax);
-    add(eax, opcode.immediate);
-    // clear the upper 32 bits of rax
-    mov(eax, eax);
-    // Load the value of that register into result
-    mov(rbx, qword[STATE]);
-    add(rbx, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d->regs.reg_array)));
-    mov(RESULT, dword[rbx + rax * 4]);
+    ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    mov(ABI_PARAM1, STATE);
+    mov(ABI_PARAM2, METHOD_ADDRESS);
+    CallFarFunction(*this, Read);
+    ABI_PopRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
+    mov(RESULT, ABI_RETURN);
     Compile_ProcessResult(opcode.result_operation, opcode.dst);
+
+    //// Load into rax the value of the register that we want to read
+    // Compile_GetRegister(opcode.src_a, eax);
+    // add(eax, opcode.immediate);
+    //// clear the upper 32 bits of rax
+    // mov(eax, eax);
+    //// Load the value of that register into result
+    //// TODO: this doesn't get the right address for the pointer to the maxwell3d->regs
+    // mov(rbx, qword[STATE + static_cast<Xbyak::uint32>(offsetof(Engines::Maxwell3D, regs))]);
+    // mov(RESULT, dword[rbx + rax * 4]);
+    // Compile_ProcessResult(opcode.result_operation, opcode.dst);
 }
 
 void JitMacro::Compile_Branch(Macro::Opcode opcode) {
     LOG_CRITICAL(HW_GPU, "");
+    db(0xcc);
     Xbyak::Label taken, end;
     auto value = Compile_GetRegister(opcode.src_a, eax);
     cmp(value, 0);
@@ -253,7 +268,8 @@ void JitMacro::Compile_Branch(Macro::Opcode opcode) {
     // Branch was taken
     L(taken);
     // Ignore the delay slot if the branch has the annul bit.
-    s32 jump_address = pc + opcode.GetBranchTarget() - 4;
+    // pc is auto incremented by 4 after we get the opcode so account for it here
+    s32 jump_address = pc - 4 + opcode.GetBranchTarget();
     if (!opcode.branch_annul) {
         // Execute one more instruction due to the delay slot.
         Compile_NextInstruction();
@@ -321,6 +337,7 @@ void JitMacro::Compile_ProcessResult(Macro::ResultOperation operation, u32 reg) 
         break;
     case Macro::ResultOperation::FetchAndSetMethod:
         // Fetch parameter and use result as Method Address.
+        // db(0xcc);
         SetRegister(Compile_FetchParameter());
         SetMethodAddress();
         break;
@@ -352,16 +369,11 @@ static void Send(Engines::Maxwell3D* maxwell3d, u32 method_address, u32 value) {
     maxwell3d->WriteReg(ma.address, value, 0);
 }
 
-static u32 Read(Engines::Maxwell3D* maxwell3d, u32 method) {
-    maxwell3d->regs.reg_array[method];
-    return maxwell3d->GetRegisterValue(method);
-}
-
 void JitMacro::Compile_Send(Xbyak::Reg32 reg) {
     LOG_CRITICAL(HW_GPU, "");
     ABI_PushRegistersAndAdjustStack(*this, PersistentCallerSavedRegs(), 0);
     // The first member of the struct is the maxwell3d pointer, so we dont move the param
-    mov(ABI_PARAM1, qword[STATE]);
+    mov(ABI_PARAM1, STATE);
     // add(ABI_PARAM1, static_cast<Xbyak::uint32>(offsetof(JitState, maxwell3d)));
     mov(ABI_PARAM2, METHOD_ADDRESS);
     // the address field is only the 12 highest bits mask the others
