@@ -314,7 +314,7 @@ void GRenderWindow::InitRenderTarget() {
         delete layout();
     }
 
-    bool first_frame = false;
+    first_frame = false;
 
     // TODO: One of these flags might be interesting: WA_OpaquePaintEvent, WA_NoBackground,
     // WA_DontShowOnScreen, WA_DeleteOnClose

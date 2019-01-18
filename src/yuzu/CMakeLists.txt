@@ -106,6 +106,7 @@ set(UIS
     configuration/configure_web.ui
     compatdb.ui
     hotkeys.ui
+    loading_screen.ui
     main.ui
 )
 

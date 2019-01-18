@@ -414,6 +414,7 @@ void GMainWindow::InitializeWidgets() {
 
     loading_screen = new LoadingScreen(this);
     loading_screen->hide();
+    ui.horizontalLayout->addWidget(loading_screen);
 
     // Create status bar
     message_label = new QLabel();
@@ -937,6 +938,8 @@ void GMainWindow::ShutdownGame() {
     ui.action_Load_Amiibo->setEnabled(false);
     ui.action_Capture_Screenshot->setEnabled(false);
     render_window->hide();
+    loading_screen->hide();
+    loading_screen->Clear();
     game_list->show();
     game_list->setFilterFocus();
     setWindowTitle(QString("yuzu %1| %2-%3")
@@ -1512,6 +1515,7 @@ void GMainWindow::OnStopGame() {
 
 void GMainWindow::OnLoadComplete() {
     loading_screen->hide();
+    loading_screen->Clear();
     render_window->show();
     render_window->setFocus();
 }

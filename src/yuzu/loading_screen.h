@@ -11,36 +11,42 @@ namespace Loader {
 class AppLoader;
 }
 
-class QLabel;
+namespace Ui {
+class LoadingScreen;
+}
+
+class QSpacerItem;
 class QMovie;
 class QByteArray;
 class QBuffer;
 class QProgressBar;
-
-class LoadingWidget : public QWidget {
-    Q_OBJECT
-public:
-    explicit LoadingWidget(QWidget* parent = nullptr);
-
-private:
-    QProgressBar* progress_bar;
-};
+class QHBoxLayout;
 
 class LoadingScreen : public QWidget {
     Q_OBJECT
 
 public:
     explicit LoadingScreen(QWidget* parent = nullptr);
+
+    /// Call before showing the loading screen to load the widgets with the logo and banner for the
+    /// currently loaded application.
     void Prepare(Loader::AppLoader& loader);
+
+    /// After the loading screen is hidden, the owner of this class can call this to clean up any
+    /// used resources such as the logo and banner.
+    void Clear();
+
+    // In order to use a custom widget with a stylesheet, you need to override the paintEvent
+    // See https://wiki.qt.io/How_to_Change_the_Background_Color_of_QWidget
+    void paintEvent(QPaintEvent* event) override;
 
 public slots:
     void OnLoadProgress(std::size_t value, std::size_t total);
 
 private:
-    QLabel* banner = nullptr;
-    QLabel* logo = nullptr;
-    LoadingWidget* loading = nullptr;
-    QMovie* animation = nullptr;
+    std::unique_ptr<QMovie> animation;
     std::unique_ptr<QBuffer> backing_buf;
     std::unique_ptr<QByteArray> backing_mem;
+    std::unique_ptr<Ui::LoadingScreen> ui;
+    std::size_t previous_total = 0;
 };

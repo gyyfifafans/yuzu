@@ -4,60 +4,66 @@
 
 #include <QBuffer>
 #include <QByteArray>
+#include <QHBoxLayout>
 #include <QIODevice>
 #include <QImage>
 #include <QLabel>
 #include <QMovie>
+#include <QPainter>
 #include <QPalette>
 #include <QPixmap>
-#include <QVBoxLayout>
+#include <QProgressBar>
+#include <QStyleOption>
+#include <QWindow>
 #include "common/logging/log.h"
 #include "core/loader/loader.h"
+#include "ui_loading_screen.h"
 #include "yuzu/loading_screen.h"
 
-LoadingScreen::LoadingScreen(QWidget* parent) : QWidget(parent) {
-    banner = new QLabel(this);
-    logo = new QLabel(this);
-    QPalette pal;
-    pal.setColor(QPalette::Background, Qt::black);
-    setAutoFillBackground(true);
-    setPalette(pal);
+LoadingScreen::LoadingScreen(QWidget* parent)
+    : QWidget(parent), ui(std::make_unique<Ui::LoadingScreen>()) {
+    ui->setupUi(this);
+    // Progress bar is hidden until we have a use for it.
+    ui->progress_bar->hide();
 }
 
 void LoadingScreen::Prepare(Loader::AppLoader& loader) {
-    if (layout()) {
-        delete layout();
-    }
-    if (animation) {
-        delete animation;
-    }
     std::vector<u8> buffer;
-    loader.ReadBanner(buffer);
-    backing_mem =
-        std::make_unique<QByteArray>(reinterpret_cast<char*>(buffer.data()), buffer.size());
-    backing_buf = std::make_unique<QBuffer>(backing_mem.get());
-    backing_buf->open(QIODevice::ReadOnly);
-    animation = new QMovie(backing_buf.get(), QByteArray(), this);
-    // todo check validity
-    banner->setMovie(animation);
-    animation->start();
-    buffer.clear();
-
-    loader.ReadLogo(buffer);
-    QPixmap map;
-    map.loadFromData(buffer.data(), buffer.size());
-    logo->setPixmap(map);
-
-    QBoxLayout* layout = new QVBoxLayout(this);
-    resize(1000, 500);
-    layout->addWidget(banner);
-    layout->addWidget(loading);
-    layout->addWidget(logo);
-    layout->setMargin(0);
-
-    setLayout(layout);
+    if (loader.ReadBanner(buffer) == Loader::ResultStatus::Success) {
+        backing_mem =
+            std::make_unique<QByteArray>(reinterpret_cast<char*>(buffer.data()), buffer.size());
+        backing_buf = std::make_unique<QBuffer>(backing_mem.get());
+        backing_buf->open(QIODevice::ReadOnly);
+        animation = std::make_unique<QMovie>(backing_buf.get(), QByteArray("GIF"));
+        animation->start();
+        ui->banner->setMovie(animation.get());
+        buffer.clear();
+    }
+    if (loader.ReadLogo(buffer) == Loader::ResultStatus::Success) {
+        QPixmap map;
+        map.loadFromData(buffer.data(), buffer.size());
+        ui->logo->setPixmap(map);
+    }
 }
 
 void LoadingScreen::OnLoadProgress(std::size_t value, std::size_t total) {
-    LOG_INFO(Frontend, "Progress {} / {}", value, total);
+    if (total != previous_total) {
+        ui->progress_bar->setMaximum(total);
+        previous_total = total;
+    }
+    ui->progress_bar->setValue(value);
+}
+
+void LoadingScreen::paintEvent(QPaintEvent* event) {
+    QStyleOption opt;
+    opt.init(this);
+    QPainter p(this);
+    style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
+    QWidget::paintEvent(event);
+}
+
+void LoadingScreen::Clear() {
+    animation.reset();
+    backing_buf.reset();
+    backing_mem.reset();
 }
