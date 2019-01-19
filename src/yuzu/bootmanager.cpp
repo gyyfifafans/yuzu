@@ -350,13 +350,12 @@ void GRenderWindow::CaptureScreenshot(u16 res_scale, const QString& screenshot_p
 
     const Layout::FramebufferLayout layout{Layout::FrameLayoutFromResolutionScale(res_scale)};
     screenshot_image = QImage(QSize(layout.width, layout.height), QImage::Format_RGB32);
-    renderer.RequestScreenshot(
-        screenshot_image.bits(),
-        [=] {
-            screenshot_image.mirrored(false, true).save(screenshot_path);
-            LOG_INFO(Frontend, "The screenshot is saved.");
-        },
-        layout);
+    renderer.RequestScreenshot(screenshot_image.bits(),
+                               [=] {
+                                   screenshot_image.mirrored(false, true).save(screenshot_path);
+                                   LOG_INFO(Frontend, "The screenshot is saved.");
+                               },
+                               layout);
 }
 
 void GRenderWindow::OnMinimalClientAreaChangeRequest(
