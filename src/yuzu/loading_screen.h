@@ -19,18 +19,17 @@ namespace Ui {
 class LoadingScreen;
 }
 
-class QSpacerItem;
-class QMovie;
-class QByteArray;
 class QBuffer;
-class QProgressBar;
-class QHBoxLayout;
+class QByteArray;
+class QMovie;
 
 class LoadingScreen : public QWidget {
     Q_OBJECT
 
 public:
     explicit LoadingScreen(QWidget* parent = nullptr);
+
+    ~LoadingScreen();
 
     /// Call before showing the loading screen to load the widgets with the logo and banner for the
     /// currently loaded application.
@@ -44,7 +43,6 @@ public:
     // See https://wiki.qt.io/How_to_Change_the_Background_Color_of_QWidget
     void paintEvent(QPaintEvent* event) override;
 
-public slots:
     void OnLoadProgress(std::size_t value, std::size_t total);
 
 private:

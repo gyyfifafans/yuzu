@@ -32,6 +32,8 @@ LoadingScreen::LoadingScreen(QWidget* parent)
     ui->progress_bar->hide();
 }
 
+LoadingScreen::~LoadingScreen() = default;
+
 void LoadingScreen::Prepare(Loader::AppLoader& loader) {
     std::vector<u8> buffer;
     if (loader.ReadBanner(buffer) == Loader::ResultStatus::Success) {
