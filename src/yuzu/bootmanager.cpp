@@ -28,6 +28,7 @@ void EmuThread::run() {
     MicroProfileOnThreadCreate("EmuThread");
 
     stop_run = false;
+    QThread::sleep(15);
 
     // holds whether the cpu was running during the last iteration,
     // so that the DebugModeLeft signal can be emitted before the

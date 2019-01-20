@@ -122,6 +122,27 @@ void LoadingScreen::Prepare(Loader::AppLoader& loader) {
     }
 
     OnLoadProgress(VideoCore::LoadCallbackStage::Prepare, 0, 100);
+    // testing fake shader loading
+    QtConcurrent::run([this] {
+        QThread::msleep(500);
+
+        // test fast shader loading
+        for (int i = 0; i < 1500; i++) {
+            emit LoadProgress(VideoCore::LoadCallbackStage::Raw, i, 1500);
+            QThread::msleep(1);
+        }
+        int total = 300;
+        for (int i = 0; i < 270; i++) {
+            emit LoadProgress(VideoCore::LoadCallbackStage::Binary, i, total);
+            QThread::msleep(1);
+        }
+        // test stage slow down when it reaches shaders that aren't compiled
+        for (int i = 270; i < 300; i++) {
+            emit LoadProgress(VideoCore::LoadCallbackStage::Binary, i, total);
+            QThread::msleep(rand() % 500 + 50);
+        }
+        emit LoadProgress(VideoCore::LoadCallbackStage::Complete, 100, 100);
+    });
 }
 
 void LoadingScreen::OnLoadProgress(VideoCore::LoadCallbackStage stage, std::size_t value,
