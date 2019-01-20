@@ -28,63 +28,6 @@
 #include <QMovie>
 #endif
 
-/// Static maps defining the differences in text and styling for each stage
-static std::unordered_map<VideoCore::LoadCallbackStage, const char*> stage_translations = {
-    {VideoCore::LoadCallbackStage::Prepare, QT_TRANSLATE_NOOP("LoadingScreen", "Loading...")},
-    {VideoCore::LoadCallbackStage::Raw,
-     QT_TRANSLATE_NOOP("LoadingScreen", "Preparing Shaders %1 / %2")},
-    {VideoCore::LoadCallbackStage::Binary,
-     QT_TRANSLATE_NOOP("LoadingScreen", "Loading Shaders %1 / %2")},
-    {VideoCore::LoadCallbackStage::Complete, QT_TRANSLATE_NOOP("LoadingScreen", "Launching...")},
-};
-
-static std::unordered_map<VideoCore::LoadCallbackStage, const char*> progressbar_style = {
-    {VideoCore::LoadCallbackStage::Prepare,
-     R"(
-QProgressBar {
-background-color: black;
-border: 2px solid black;
-border-radius: 4px;
-padding: 2px;
-}
-QProgressBar::chunk {
-background-color: white;
-})"},
-    {VideoCore::LoadCallbackStage::Raw,
-     R"(
-QProgressBar {
-background-color: black;
-border: 2px solid white;
-border-radius: 4px;
-padding: 2px;
-}
-QProgressBar::chunk {
-background-color: #0ab9e6;
-})"},
-    {VideoCore::LoadCallbackStage::Binary,
-     R"(
-QProgressBar {
-background-color: black;
-border: 2px solid white;
-border-radius: 4px;
-padding: 2px;
-}
-QProgressBar::chunk {
-background-color: #ff3c28;
-})"},
-    {VideoCore::LoadCallbackStage::Complete,
-     R"(
-QProgressBar {
-background-color: black;
-border: 2px solid white;
-border-radius: 4px;
-padding: 2px;
-}
-QProgressBar::chunk {
-background-color: #ff3c28;
-})"},
-};
-
 LoadingScreen::LoadingScreen(QWidget* parent)
     : QWidget(parent), ui(std::make_unique<Ui::LoadingScreen>()),
       previous_stage(VideoCore::LoadCallbackStage::Complete) {
@@ -93,6 +36,56 @@ LoadingScreen::LoadingScreen(QWidget* parent)
     connect(this, &LoadingScreen::LoadProgress, this, &LoadingScreen::OnLoadProgress,
             Qt::QueuedConnection);
     qRegisterMetaType<VideoCore::LoadCallbackStage>();
+
+    stage_translations = {
+        {VideoCore::LoadCallbackStage::Prepare, tr("Loading...")},
+        {VideoCore::LoadCallbackStage::Raw, tr("Preparing Shaders %1 / %2")},
+        {VideoCore::LoadCallbackStage::Binary, tr("Loading Shaders %1 / %2")},
+        {VideoCore::LoadCallbackStage::Complete, tr("Launching...")},
+    };
+    progressbar_style = {
+        {VideoCore::LoadCallbackStage::Prepare,
+         R"(
+QProgressBar {
+  background-color: black;
+}
+QProgressBar::chunk {
+  background-color: white;
+})"},
+        {VideoCore::LoadCallbackStage::Raw,
+         R"(
+QProgressBar {
+  background-color: black;
+  border: 2px solid white;
+  border-radius: 4px;
+  padding: 2px;
+}
+QProgressBar::chunk {
+  background-color: #0ab9e6;
+})"},
+        {VideoCore::LoadCallbackStage::Binary,
+         R"(
+QProgressBar {
+  background-color: black;
+  border: 2px solid white;
+  border-radius: 4px;
+  padding: 2px;
+}
+QProgressBar::chunk {
+ background-color: #ff3c28;
+})"},
+        {VideoCore::LoadCallbackStage::Complete,
+         R"(
+QProgressBar {
+  background-color: black;
+  border: 2px solid white;
+  border-radius: 4px;
+  padding: 2px;
+}
+QProgressBar::chunk {
+  background-color: #ff3c28;
+})"},
+    };
 }
 
 LoadingScreen::~LoadingScreen() = default;
@@ -185,7 +178,7 @@ void LoadingScreen::OnLoadProgress(VideoCore::LoadCallbackStage stage, std::size
     }
 
     // update labels and progress bar
-    ui->stage->setText(tr(stage_translations[stage]).arg(value).arg(total));
+    ui->stage->setText(stage_translations[stage].arg(value).arg(total));
     ui->value->setText(estimate);
     ui->progress_bar->setValue(value);
     previous_time = now;
