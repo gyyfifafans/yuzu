@@ -44,6 +44,8 @@ public:
     /// Shutdown the renderer
     virtual void ShutDown() = 0;
 
+    virtual void PopulateBackendInfo(Core::Frontend::BackendInfo&) = 0;
+
     // Getter/setter functions:
     // ------------------------
 

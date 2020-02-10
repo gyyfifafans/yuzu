@@ -135,10 +135,118 @@ void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
     render_window.PollEvents();
 }
 
+bool RendererVulkan::SelectInstanceExtensions(std::vector<const char*>* extension_list,
+                                              Core::Frontend::WindowSystemType wstype,
+                                              bool enable_debug_report) {
+    auto available_extension_list = vk::enumerateInstanceExtensionProperties();
+
+    if (available_extension_list.size() == 0) {
+        LOG_ERROR(Render_Vulkan, "Vulkan: No extensions supported by instance.");
+        return false;
+    }
+
+    for (const auto& extension_properties : available_extension_list)
+        LOG_INFO(Render_Vulkan, "Available extension: {}", extension_properties.extensionName);
+
+    auto AddExtension = [&](const char* name, bool required) {
+        if (std::find_if(available_extension_list.begin(), available_extension_list.end(),
+                         [&](const VkExtensionProperties& properties) {
+                             return !strcmp(name, properties.extensionName);
+                         }) != available_extension_list.end()) {
+            LOG_INFO(Render_Vulkan, "Enabling extension: {}", name);
+            extension_list->push_back(name);
+            return true;
+        }
+
+        if (required)
+            LOG_ERROR(Render_Vulkan, "Vulkan: Missing required extension {}.", name);
+
+        return false;
+    };
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+    if (wstype == Core::Frontend::WindowSystemType::Windows &&
+        !AddExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME, true)) {
+        return false;
+    }
+#endif
+#if defined(VK_USE_PLATFORM_XLIB_KHR)
+    if (wstype == Core::Frontend::WindowSystemType::X11 &&
+        !AddExtension(VK_KHR_XLIB_SURFACE_EXTENSION_NAME, true)) {
+        return false;
+    }
+#endif
+
+    // VK_EXT_debug_report
+    if (enable_debug_report && !AddExtension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME, false))
+        LOG_WARNING(Render_Vulkan,
+                    "Vulkan: Debug report requested, but extension is not available.");
+
+    AddExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, false);
+    AddExtension(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, false);
+
+    return true;
+}
+
+vk::Instance RendererVulkan::CreateVulkanInstance(Core::Frontend::WindowSystemType wstype,
+                                                  bool enable_debug_report,
+                                                  bool enable_validation_layer) {
+    std::vector<const char*> enabled_extensions;
+    if (!SelectInstanceExtensions(&enabled_extensions, wstype, enable_debug_report))
+        return nullptr;
+
+    if (vk::enumerateInstanceVersion() < VK_MAKE_VERSION(1, 1, 0)) {
+        LOG_ERROR(Render_Vulkan, "Vulkan 1.1 is not susupported! Try updating your drivers");
+    }
+
+    vk::ApplicationInfo app_info = {};
+    app_info.pNext = nullptr;
+    app_info.pApplicationName = "yuzu Emulator";
+    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.pEngineName = "yuzu Emulator";
+    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.apiVersion = VK_MAKE_VERSION(1, 1, 0);
+
+    vk::InstanceCreateInfo instance_create_info = {};
+    instance_create_info.pNext = nullptr;
+    instance_create_info.flags = vk::InstanceCreateFlags{};
+    instance_create_info.pApplicationInfo = &app_info;
+    instance_create_info.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions.size());
+    instance_create_info.ppEnabledExtensionNames = enabled_extensions.data();
+    instance_create_info.enabledLayerCount = 0;
+    instance_create_info.ppEnabledLayerNames = nullptr;
+
+    // Enable debug layer on debug builds
+    if (enable_validation_layer) {
+        static const char* layer_names[] = {"VK_LAYER_LUNARG_standard_validation"};
+        instance_create_info.enabledLayerCount = 1;
+        instance_create_info.ppEnabledLayerNames = layer_names;
+    }
+
+    vk::Instance instance;
+    vk::Result res = vk::createInstance(&instance_create_info, nullptr, &instance);
+    if (res != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "vkCreateInstance failed: {}", vk::to_string(res));
+        return nullptr;
+    }
+
+    return instance;
+}
+
 bool RendererVulkan::Init() {
-    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr{};
-    render_window.RetrieveVulkanHandlers(&vkGetInstanceProcAddr, &instance, &surface);
-    const vk::DispatchLoaderDynamic dldi(instance, vkGetInstanceProcAddr);
+    vk::DynamicLoader dl;
+    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
+        dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+
+    const vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
+
+    // TODO turn on validation layers
+    instance = CreateVulkanInstance(Settings::values.renderer_debug, false);
+
+    // Add the instance to the default dispatcher so that it will enable instance level functions.
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
+
+    // render_window.RetrieveVulkanHandlers(&vkGetInstanceProcAddr, &instance, &surface);
 
     std::optional<vk::DebugUtilsMessengerEXT> callback;
     if (Settings::values.renderer_debug && dldi.vkCreateDebugUtilsMessengerEXT) {
