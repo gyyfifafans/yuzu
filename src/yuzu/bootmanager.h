@@ -22,9 +22,6 @@ class QTouchEvent;
 class QStringList;
 class QSurface;
 class QOpenGLContext;
-#ifdef HAS_VULKAN
-class QVulkanInstance;
-#endif
 
 class GWidgetInternal;
 class GGLWidgetInternal;
@@ -135,8 +132,6 @@ public:
     void DoneCurrent() override;
     void PollEvents() override;
     bool IsShown() const override;
-    void RetrieveVulkanHandlers(void* get_instance_proc_addr, void* instance,
-                                void* surface) const override;
     std::unique_ptr<Core::Frontend::GraphicsContext> CreateSharedContext() const override;
 
     void ForwardKeyPressEvent(QKeyEvent* event);
@@ -153,8 +148,6 @@ public:
     void closeEvent(QCloseEvent* event) override;
     bool event(QEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
-
-    void OnClientAreaResized(u32 width, u32 height);
 
     bool InitRenderTarget();
 
@@ -177,8 +170,6 @@ private:
     void TouchUpdateEvent(const QTouchEvent* event);
     void TouchEndEvent();
 
-    void OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) override;
-
     bool InitializeOpenGL();
     bool InitializeVulkan();
     bool LoadOpenGL();
@@ -193,10 +184,6 @@ private:
     // Context that will be shared between all newly created contexts. This should never be made
     // current
     std::unique_ptr<QOpenGLContext> shared_context;
-
-#ifdef HAS_VULKAN
-    std::unique_ptr<QVulkanInstance> vk_instance;
-#endif
 
     /// Temporary storage of the screenshot taken
     QImage screenshot_image;

@@ -14,9 +14,6 @@
 #include <QScreen>
 #include <QStringList>
 #include <QWindow>
-#ifdef HAS_VULKAN
-#include <QVulkanWindow>
-#endif
 
 #include <fmt/format.h>
 
@@ -131,7 +128,7 @@ public:
     virtual ~GWidgetInternal() = default;
 
     void resizeEvent(QResizeEvent* ev) override {
-        parent->OnClientAreaResized(ev->size().width(), ev->size().height());
+        parent->resize(ev->size());
         parent->OnFramebufferSizeChanged();
     }
 
@@ -216,15 +213,49 @@ public:
 
 class GVKWidgetInternal final : public GWidgetInternal {
 public:
-    GVKWidgetInternal(GRenderWindow* parent, QVulkanInstance* instance) : GWidgetInternal(parent) {
+    GVKWidgetInternal(GRenderWindow* parent) : GWidgetInternal(parent) {
         setSurfaceType(QSurface::SurfaceType::VulkanSurface);
-        setVulkanInstance(instance);
+        // setVulkanInstance(instance);
     }
     ~GVKWidgetInternal() override = default;
 };
 
+static Core::Frontend::WindowSystemType GetWindowSystemType() {
+    // Determine WSI type based on Qt platform.
+    QString platform_name = QGuiApplication::platformName();
+    if (platform_name == QStringLiteral("windows"))
+        return Core::Frontend::WindowSystemType::Windows;
+    else if (platform_name == QStringLiteral("xcb"))
+        return Core::Frontend::WindowSystemType::X11;
+    else if (platform_name == QStringLiteral("wayland"))
+        return Core::Frontend::WindowSystemType::Wayland;
+
+    LOG_CRITICAL(Frontend, "Unknown Qt platform!");
+    return Core::Frontend::WindowSystemType::Windows;
+}
+
+static Core::Frontend::EmuWindow::WindowSystemInfo GetWindowSystemInfo(QWindow* window) {
+    Core::Frontend::EmuWindow::WindowSystemInfo wsi;
+    wsi.type = GetWindowSystemType();
+
+    // Our Win32 Qt external doesn't have the private API.
+#if defined(WIN32) || defined(__APPLE__)
+    wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
+#else
+    QPlatformNativeInterface* pni = QGuiApplication::platformNativeInterface();
+    wsi.display_connection = pni->nativeResourceForWindow("display", window);
+    if (wsi.type == WindowSystemType::Wayland)
+        wsi.render_surface = window ? pni->nativeResourceForWindow("surface", window) : nullptr;
+    else
+        wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
+#endif
+    wsi.render_surface_scale = window ? static_cast<float>(window->devicePixelRatio()) : 1.0f;
+
+    return wsi;
+}
+
 GRenderWindow::GRenderWindow(GMainWindow* parent, EmuThread* emu_thread)
-    : QWidget(parent), emu_thread(emu_thread) {
+    : Core::Frontend::EmuWindow(), QWidget(parent), emu_thread(emu_thread) {
     setWindowTitle(QStringLiteral("yuzu %1 | %2-%3")
                        .arg(QString::fromUtf8(Common::g_build_name),
                             QString::fromUtf8(Common::g_scm_branch),
@@ -282,21 +313,6 @@ void GRenderWindow::PollEvents() {}
 
 bool GRenderWindow::IsShown() const {
     return !isMinimized();
-}
-
-void GRenderWindow::RetrieveVulkanHandlers(void* get_instance_proc_addr, void* instance,
-                                           void* surface) const {
-#ifdef HAS_VULKAN
-    const auto instance_proc_addr = vk_instance->getInstanceProcAddr("vkGetInstanceProcAddr");
-    const VkInstance instance_copy = vk_instance->vkInstance();
-    const VkSurfaceKHR surface_copy = vk_instance->surfaceForWindow(child);
-
-    std::memcpy(get_instance_proc_addr, &instance_proc_addr, sizeof(instance_proc_addr));
-    std::memcpy(instance, &instance_copy, sizeof(instance_copy));
-    std::memcpy(surface, &surface_copy, sizeof(surface_copy));
-#else
-    UNREACHABLE_MSG("Executing Vulkan code without compiling Vulkan");
-#endif
 }
 
 // On Qt 5.0+, this correctly gets the size of the framebuffer (pixels).
@@ -413,10 +429,6 @@ void GRenderWindow::focusOutEvent(QFocusEvent* event) {
     InputCommon::GetKeyboard()->ReleaseAllKeys();
 }
 
-void GRenderWindow::OnClientAreaResized(u32 width, u32 height) {
-    NotifyClientAreaSizeChanged(std::make_pair(width, height));
-}
-
 std::unique_ptr<Core::Frontend::GraphicsContext> GRenderWindow::CreateSharedContext() const {
     return std::make_unique<GGLContext>(context.get());
 }
@@ -446,6 +458,8 @@ bool GRenderWindow::InitRenderTarget() {
         if (!InitializeVulkan()) {
             return false;
         }
+        // Update the Window System information with the new render target
+        GetWindowSystem() = GetWindowSystemInfo(child);
         break;
     }
 
@@ -468,10 +482,7 @@ bool GRenderWindow::InitRenderTarget() {
     child->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
     container->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
 
-    OnMinimalClientAreaChangeRequest(GetActiveConfig().min_client_area_size);
-
     OnFramebufferSizeChanged();
-    NotifyClientAreaSizeChanged(child->GetSize());
 
     BackupGeometry();
 
@@ -506,10 +517,6 @@ void GRenderWindow::CaptureScreenshot(u32 res_scale, const QString& screenshot_p
         layout);
 }
 
-void GRenderWindow::OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) {
-    setMinimumSize(minimal_size.first, minimal_size.second);
-}
-
 bool GRenderWindow::InitializeOpenGL() {
     // TODO: One of these flags might be interesting: WA_OpaquePaintEvent, WA_NoBackground,
     // WA_DontShowOnScreen, WA_DeleteOnClose
@@ -534,30 +541,7 @@ bool GRenderWindow::InitializeOpenGL() {
 
 bool GRenderWindow::InitializeVulkan() {
 #ifdef HAS_VULKAN
-    vk_instance = std::make_unique<QVulkanInstance>();
-    vk_instance->setApiVersion(QVersionNumber(1, 1, 0));
-    vk_instance->setFlags(QVulkanInstance::Flag::NoDebugOutputRedirect);
-    if (Settings::values.renderer_debug) {
-        const auto supported_layers{vk_instance->supportedLayers()};
-        const bool found =
-            std::find_if(supported_layers.begin(), supported_layers.end(), [](const auto& layer) {
-                constexpr const char searched_layer[] = "VK_LAYER_LUNARG_standard_validation";
-                return layer.name == searched_layer;
-            });
-        if (found) {
-            vk_instance->setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
-            vk_instance->setExtensions(QByteArrayList() << VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-    }
-    if (!vk_instance->create()) {
-        QMessageBox::critical(
-            this, tr("Error while initializing Vulkan 1.1!"),
-            tr("Your OS doesn't seem to support Vulkan 1.1 instances, or you do not have the "
-               "latest graphics drivers."));
-        return false;
-    }
-
-    child = new GVKWidgetInternal(this, vk_instance.get());
+    child = new GVKWidgetInternal(this);
     return true;
 #else
     QMessageBox::critical(this, tr("Vulkan not available!"),

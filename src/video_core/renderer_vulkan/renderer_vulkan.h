@@ -11,7 +11,10 @@
 
 namespace Core {
 class System;
+namespace Frontend {
+enum class WindowSystemType;
 }
+} // namespace Core
 
 namespace Vulkan {
 
@@ -49,11 +52,19 @@ private:
     std::optional<vk::DebugUtilsMessengerEXT> CreateDebugCallback(
         const vk::DispatchLoaderDynamic& dldi);
 
+    vk::Instance CreateVulkanInstance(Core::Frontend::WindowSystemType wstype,
+                                      bool enable_debug_report, bool enable_validation_layer);
+    bool SelectInstanceExtensions(std::vector<const char*>* extension_list,
+                                  Core::Frontend::WindowSystemType wstype,
+                                  bool enable_debug_report);
+
     bool PickDevices(const vk::DispatchLoaderDynamic& dldi);
 
     void Report() const;
 
     Core::System& system;
+
+    Common::DynamicLibrary vulkan_library;
 
     vk::Instance instance;
     vk::SurfaceKHR surface;
