@@ -461,7 +461,7 @@ bool GRenderWindow::InitRenderTarget() {
             return false;
         }
         // Update the Window System information with the new render target
-        GetWindowSystem() = GetWindowSystemInfo(child);
+        window_info = GetWindowSystemInfo(child);
         break;
     }
 

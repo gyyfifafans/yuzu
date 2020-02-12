@@ -135,10 +135,11 @@ void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
     render_window.PollEvents();
 }
 
-bool RendererVulkan::SelectInstanceExtensions(std::vector<const char*>* extension_list,
-                                              Core::Frontend::WindowSystemType wstype,
+bool RendererVulkan::SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
+                                              std::vector<const char*>* extension_list,
+                                              const Core::Frontend::WindowSystemType& wstype,
                                               bool enable_debug_report) {
-    auto available_extension_list = vk::enumerateInstanceExtensionProperties();
+    auto available_extension_list = vk::enumerateInstanceExtensionProperties(nullptr, dldi);
 
     if (available_extension_list.size() == 0) {
         LOG_ERROR(Render_Vulkan, "Vulkan: No extensions supported by instance.");
@@ -188,14 +189,15 @@ bool RendererVulkan::SelectInstanceExtensions(std::vector<const char*>* extensio
     return true;
 }
 
-vk::Instance RendererVulkan::CreateVulkanInstance(Core::Frontend::WindowSystemType wstype,
+vk::Instance RendererVulkan::CreateVulkanInstance(const vk::DispatchLoaderDynamic& dldi,
+                                                  const Core::Frontend::WindowSystemType& wstype,
                                                   bool enable_debug_report,
                                                   bool enable_validation_layer) {
     std::vector<const char*> enabled_extensions;
-    if (!SelectInstanceExtensions(&enabled_extensions, wstype, enable_debug_report))
+    if (!SelectInstanceExtensions(dldi, &enabled_extensions, wstype, enable_debug_report))
         return nullptr;
 
-    if (vk::enumerateInstanceVersion() < VK_MAKE_VERSION(1, 1, 0)) {
+    if (vk::enumerateInstanceVersion(dldi) < VK_MAKE_VERSION(1, 1, 0)) {
         LOG_ERROR(Render_Vulkan, "Vulkan 1.1 is not susupported! Try updating your drivers");
     }
 
@@ -224,7 +226,7 @@ vk::Instance RendererVulkan::CreateVulkanInstance(Core::Frontend::WindowSystemTy
     }
 
     vk::Instance instance;
-    vk::Result res = vk::createInstance(&instance_create_info, nullptr, &instance);
+    vk::Result res = vk::createInstance(&instance_create_info, nullptr, &instance, dldi);
     if (res != vk::Result::eSuccess) {
         LOG_ERROR(Render_Vulkan, "vkCreateInstance failed: {}", vk::to_string(res));
         return nullptr;
@@ -233,20 +235,42 @@ vk::Instance RendererVulkan::CreateVulkanInstance(Core::Frontend::WindowSystemTy
     return instance;
 }
 
-bool RendererVulkan::Init() {
-    vk::DynamicLoader dl;
+void RendererVulkan::PopulateBackendInfo(Common::DynamicLibrary dl,
+                                         Core::Frontend::BackendInfo& info) {
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
-        dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+        static_cast<PFN_vkGetInstanceProcAddr>(dl.GetSymbolAddress("vkGetInstanceProcAddr"));
+
+    const vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
+
+    if (!instance) {
+        instance = CreateVulkanInstance(dldi, render_window.GetWindowInfo().type,
+                                        Settings::values.renderer_debug, false);
+    }
+    if (!instance) {
+        info.api_type = Core::Frontend::APIType::Nothing;
+    }
+
+    auto physical_devices = instance.enumeratePhysicalDevices(dldi);
+
+    for (const auto physical_device : physical_devices) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(physical_device, &properties);
+        info.adapters.push_back(properties.deviceName);
+    }
+    info.api_type = Core::Frontend::APIType::Vulkan;
+}
+
+bool RendererVulkan::Init(Common::DynamicLibrary dl) {
+    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
+        static_cast<PFN_vkGetInstanceProcAddr>(dl.GetSymbolAddress("vkGetInstanceProcAddr"));
 
     const vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
 
     // TODO turn on validation layers
-    instance = CreateVulkanInstance(Settings::values.renderer_debug, false);
-
-    // Add the instance to the default dispatcher so that it will enable instance level functions.
-    VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
-
-    // render_window.RetrieveVulkanHandlers(&vkGetInstanceProcAddr, &instance, &surface);
+    if (!instance) {
+        instance = CreateVulkanInstance(dldi, render_window.GetWindowInfo().type,
+                                        Settings::values.renderer_debug, false);
+    }
 
     std::optional<vk::DebugUtilsMessengerEXT> callback;
     if (Settings::values.renderer_debug && dldi.vkCreateDebugUtilsMessengerEXT) {

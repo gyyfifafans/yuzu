@@ -39,12 +39,12 @@ public:
     virtual void SwapBuffers(const Tegra::FramebufferConfig* framebuffer) = 0;
 
     /// Initialize the renderer
-    virtual bool Init() = 0;
+    virtual bool Init(Common::DynamicLibrary dl) = 0;
 
     /// Shutdown the renderer
     virtual void ShutDown() = 0;
 
-    virtual void PopulateBackendInfo(Core::Frontend::BackendInfo&) = 0;
+    virtual void PopulateBackendInfo(Common::DynamicLibrary dl, Core::Frontend::BackendInfo&) = 0;
 
     // Getter/setter functions:
     // ------------------------
