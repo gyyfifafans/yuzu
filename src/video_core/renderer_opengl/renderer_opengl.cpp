@@ -458,7 +458,7 @@ void RendererOpenGL::CaptureScreenshot() {
     renderer_settings.screenshot_requested = false;
 }
 
-bool RendererOpenGL::Init() {
+bool RendererOpenGL::Init(Common::DynamicLibrary dl) {
     Core::Frontend::ScopeAcquireWindowContext acquire_context{render_window};
 
     if (GLAD_GL_KHR_debug) {
@@ -479,5 +479,10 @@ bool RendererOpenGL::Init() {
 }
 
 void RendererOpenGL::ShutDown() {}
+
+void RendererOpenGL::PopulateBackendInfo(Common::DynamicLibrary dl,
+                                         Core::Frontend::BackendInfo& info) {
+    info.api_type = Core::Frontend::APIType::OpenGL;
+}
 
 } // namespace OpenGL

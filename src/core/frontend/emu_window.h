@@ -7,6 +7,7 @@
 #include <memory>
 #include <tuple>
 #include <utility>
+#include <vector>
 #include "common/common_types.h"
 #include "common/dynamic_library.h"
 #include "core/frontend/framebuffer_layout.h"
@@ -134,7 +135,7 @@ public:
     /**
      * Returns system information about the drawing area.
      */
-    const WindowSystemInfo& GetWindowSystem() const {
+    const WindowSystemInfo& GetWindowInfo() const {
         return window_info;
     }
 
@@ -164,16 +165,9 @@ protected:
         framebuffer_layout = layout;
     }
 
-    /**
-     * Enables implementors to update the window system information. This should be done before
-     * starting the core if necessary
-     */
-    WindowSystemInfo& GetWindowSystem() {
-        return window_info;
-    }
+    WindowSystemInfo window_info;
 
 private:
-    WindowSystemInfo window_info;
     Layout::FramebufferLayout framebuffer_layout; ///< Current framebuffer layout
 
     class TouchState;

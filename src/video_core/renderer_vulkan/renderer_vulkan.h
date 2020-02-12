@@ -43,7 +43,9 @@ public:
     void SwapBuffers(const Tegra::FramebufferConfig* framebuffer) override;
 
     /// Initialize the renderer
-    bool Init() override;
+    bool Init(Common::DynamicLibrary dl) override;
+
+    void PopulateBackendInfo(Common::DynamicLibrary dl, Core::Frontend::BackendInfo&) override;
 
     /// Shutdown the renderer
     void ShutDown() override;
@@ -52,10 +54,13 @@ private:
     std::optional<vk::DebugUtilsMessengerEXT> CreateDebugCallback(
         const vk::DispatchLoaderDynamic& dldi);
 
-    vk::Instance CreateVulkanInstance(Core::Frontend::WindowSystemType wstype,
+    vk::Instance CreateVulkanInstance(const vk::DispatchLoaderDynamic& dldi,
+                                      const Core::Frontend::WindowSystemType& wstype,
                                       bool enable_debug_report, bool enable_validation_layer);
-    bool SelectInstanceExtensions(std::vector<const char*>* extension_list,
-                                  Core::Frontend::WindowSystemType wstype,
+
+    bool SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
+                                  std::vector<const char*>* extension_list,
+                                  const Core::Frontend::WindowSystemType& wstype,
                                   bool enable_debug_report);
 
     bool PickDevices(const vk::DispatchLoaderDynamic& dldi);

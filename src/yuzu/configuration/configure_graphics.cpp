@@ -59,7 +59,7 @@ Resolution FromResolutionFactor(float factor) {
 ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     : QWidget(parent), ui(new Ui::ConfigureGraphics) {
     vulkan_device = Settings::values.vulkan_device;
-    RetrieveVulkanDevices();
+    vulkan_devices = RenderBase();
 
     ui->setupUi(this);
 
@@ -164,47 +164,6 @@ void ConfigureGraphics::UpdateDeviceComboBox() {
         break;
     }
     ui->device->setEnabled(enabled && !Core::System::GetInstance().IsPoweredOn());
-}
-
-void ConfigureGraphics::RetrieveVulkanDevices() {
-#ifdef HAS_VULKAN
-    QVulkanInstance instance;
-    instance.setApiVersion(QVersionNumber(1, 1, 0));
-    if (!instance.create()) {
-        LOG_INFO(Frontend, "Vulkan 1.1 not available");
-        return;
-    }
-    const auto vkEnumeratePhysicalDevices{reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
-        instance.getInstanceProcAddr("vkEnumeratePhysicalDevices"))};
-    if (vkEnumeratePhysicalDevices == nullptr) {
-        LOG_INFO(Frontend, "Failed to get pointer to vkEnumeratePhysicalDevices");
-        return;
-    }
-    u32 physical_device_count;
-    if (vkEnumeratePhysicalDevices(instance.vkInstance(), &physical_device_count, nullptr) !=
-        VK_SUCCESS) {
-        LOG_INFO(Frontend, "Failed to get physical devices count");
-        return;
-    }
-    std::vector<VkPhysicalDevice> physical_devices(physical_device_count);
-    if (vkEnumeratePhysicalDevices(instance.vkInstance(), &physical_device_count,
-                                   physical_devices.data()) != VK_SUCCESS) {
-        LOG_INFO(Frontend, "Failed to get physical devices");
-        return;
-    }
-
-    const auto vkGetPhysicalDeviceProperties{reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
-        instance.getInstanceProcAddr("vkGetPhysicalDeviceProperties"))};
-    if (vkGetPhysicalDeviceProperties == nullptr) {
-        LOG_INFO(Frontend, "Failed to get pointer to vkGetPhysicalDeviceProperties");
-        return;
-    }
-    for (const auto physical_device : physical_devices) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(physical_device, &properties);
-        vulkan_devices.push_back(QString::fromUtf8(properties.deviceName));
-    }
-#endif
 }
 
 Settings::RendererBackend ConfigureGraphics::GetCurrentGraphicsBackend() const {
