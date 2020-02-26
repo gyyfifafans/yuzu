@@ -93,13 +93,11 @@ void EmuThread::run() {
 #if MICROPROFILE_ENABLED
     MicroProfileOnThreadExit();
 #endif
-
-    render_window->moveContext();
 }
 
-class GGLContext : public Core::Frontend::GraphicsContext {
+class OpenGLContext : public Core::Frontend::GraphicsContext {
 public:
-    explicit GGLContext(QOpenGLContext* shared_context) : shared_context{shared_context} {
+    explicit OpenGLContext(QOpenGLContext* shared_context) : shared_context{shared_context} {
         context.setFormat(shared_context->format());
         context.setShareContext(shared_context);
         context.create();
@@ -120,10 +118,14 @@ private:
     QOpenGLContext context;
 };
 
-class GWidgetInternal : public QWindow {
+class RenderWidget : public QWidget {
 public:
-    GWidgetInternal(GRenderWindow* parent) : parent(parent) {}
-    virtual ~GWidgetInternal() = default;
+    RenderWidget(GRenderWindow* parent) : QWidget(parent), parent(parent) {
+        setAttribute(Qt::WA_NativeWindow);
+        SetFillBackground(true);
+    }
+
+    virtual ~RenderWidget() = default;
 
     void resizeEvent(QResizeEvent* ev) override {
         parent->resize(ev->size());
@@ -171,53 +173,24 @@ public:
             InputCommon::GetMotionEmu()->EndTilt();
     }
 
-    void DisablePainting() {
-        do_painting = false;
-    }
-
-    void EnablePainting() {
-        do_painting = true;
-    }
-
     std::pair<unsigned, unsigned> GetSize() const {
         return std::make_pair(width(), height());
     }
 
-protected:
-    bool IsPaintingEnabled() const {
-        return do_painting;
+    void SetFillBackground(bool fill) {
+        setAutoFillBackground(fill);
+        setAttribute(Qt::WA_OpaquePaintEvent, !fill);
+        setAttribute(Qt::WA_NoSystemBackground, !fill);
+        setAttribute(Qt::WA_PaintOnScreen, !fill);
+    }
+
+    QPaintEngine* paintEngine() const override {
+        return autoFillBackground() ? QWidget::paintEngine() : nullptr;
     }
 
 private:
     GRenderWindow* parent;
-    bool do_painting = false;
 };
-
-// This class overrides paintEvent and resizeEvent to prevent the GUI thread from stealing GL
-// context.
-// The corresponding functionality is handled in EmuThread instead
-class GGLWidgetInternal final : public GWidgetInternal, public QOpenGLWindow {
-public:
-    GGLWidgetInternal(GRenderWindow* parent, QOpenGLContext* shared_context)
-        : GWidgetInternal(parent), QOpenGLWindow(shared_context) {}
-    ~GGLWidgetInternal() override = default;
-
-    void paintEvent(QPaintEvent* ev) override {
-        if (IsPaintingEnabled()) {
-            QPainter painter(this);
-        }
-    }
-};
-
-#ifdef HAS_VULKAN
-class GVKWidgetInternal final : public GWidgetInternal {
-public:
-    GVKWidgetInternal(GRenderWindow* parent) : GWidgetInternal(parent) {
-        setSurfaceType(QSurface::SurfaceType::VulkanSurface);
-    }
-    ~GVKWidgetInternal() override = default;
-};
-#endif
 
 static Core::Frontend::WindowSystemType GetWindowSystemType() {
     // Determine WSI type based on Qt platform.
@@ -273,23 +246,9 @@ GRenderWindow::~GRenderWindow() {
     delete child;
 }
 
-void GRenderWindow::moveContext() {
-    if (!context) {
-        return;
-    }
-    DoneCurrent();
-
-    // If the thread started running, move the GL Context to the new thread. Otherwise, move it
-    // back.
-    auto thread = (QThread::currentThread() == qApp->thread() && emu_thread != nullptr)
-                      ? emu_thread
-                      : qApp->thread();
-    context->moveToThread(thread);
-}
-
 void GRenderWindow::SwapBuffers() {
     if (context) {
-        context->swapBuffers(child);
+        context->swapBuffers(child->windowHandle());
     }
     if (!first_frame) {
         first_frame = true;
@@ -299,7 +258,7 @@ void GRenderWindow::SwapBuffers() {
 
 void GRenderWindow::MakeCurrent() {
     if (context) {
-        context->makeCurrent(child);
+        context->makeCurrent(child->windowHandle());
     }
 }
 
@@ -430,7 +389,7 @@ void GRenderWindow::focusOutEvent(QFocusEvent* event) {
 }
 
 std::unique_ptr<Core::Frontend::GraphicsContext> GRenderWindow::CreateSharedContext() const {
-    return std::make_unique<GGLContext>(context.get());
+    return std::make_unique<OpenGLContext>(context.get());
 }
 
 bool GRenderWindow::ReloadRenderTarget() {
@@ -439,9 +398,7 @@ bool GRenderWindow::ReloadRenderTarget() {
     if (child) {
         delete child;
     }
-    if (container) {
-        delete container;
-    }
+
     if (layout()) {
         delete layout();
     }
@@ -461,12 +418,11 @@ bool GRenderWindow::ReloadRenderTarget() {
         break;
     }
     // Update the Window System information with the new render target
-    window_info = GetWindowSystemInfo(child);
+    window_info = GetWindowSystemInfo(child->windowHandle());
 
-    container = QWidget::createWindowContainer(child, this);
     QBoxLayout* layout = new QHBoxLayout(this);
 
-    layout->addWidget(container);
+    layout->addWidget(child);
     layout->setMargin(0);
     setLayout(layout);
 
@@ -482,7 +438,6 @@ bool GRenderWindow::ReloadRenderTarget() {
 
     resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
     child->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
-    container->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
 
     OnFramebufferSizeChanged();
 
@@ -537,13 +492,13 @@ bool GRenderWindow::InitializeOpenGL() {
     context->create();
     fmt.setSwapInterval(false);
 
-    child = new GGLWidgetInternal(this, shared_context.get());
+    child = new RenderWidget(this);
     return true;
 }
 
 bool GRenderWindow::InitializeVulkan() {
     if constexpr (HAS_VULKAN) {
-        child = new GVKWidgetInternal(this);
+        child = new RenderWidget(this);
         return true;
     } else {
         QMessageBox::critical(this, tr("Vulkan not available!"),
@@ -605,12 +560,12 @@ QStringList GRenderWindow::GetUnsupportedGLExtensions() const {
 
 void GRenderWindow::OnEmulationStarting(EmuThread* emu_thread) {
     this->emu_thread = emu_thread;
-    child->DisablePainting();
+    child->SetFillBackground(false);
 }
 
 void GRenderWindow::OnEmulationStopping() {
     emu_thread = nullptr;
-    child->EnablePainting();
+    child->SetFillBackground(true);
 }
 
 void GRenderWindow::showEvent(QShowEvent* event) {

@@ -20,16 +20,10 @@ class QKeyEvent;
 class QScreen;
 class QTouchEvent;
 class QStringList;
-class QSurface;
-class QOpenGLContext;
 
-class GWidgetInternal;
-class GGLWidgetInternal;
-class GVKWidgetInternal;
+class RenderWidget;
 class GMainWindow;
 class GRenderWindow;
-class QSurface;
-class QOpenGLContext;
 
 namespace VideoCore {
 enum class LoadCallbackStage;
@@ -154,7 +148,6 @@ public:
     void CaptureScreenshot(u32 res_scale, const QString& screenshot_path);
 
 public slots:
-    void moveContext(); // overridden
 
     void OnEmulationStarting(EmuThread* emu_thread);
     void OnEmulationStopping();
@@ -175,8 +168,7 @@ private:
     bool LoadOpenGL();
     QStringList GetUnsupportedGLExtensions() const;
 
-    QWidget* container = nullptr;
-    GWidgetInternal* child = nullptr;
+    RenderWidget* child = nullptr;
 
     EmuThread* emu_thread;
     // Context that backs the GGLWidgetInternal (and will be used by core to render)
