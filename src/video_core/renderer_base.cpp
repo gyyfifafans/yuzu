@@ -44,12 +44,20 @@ void RendererBase::RequestScreenshot(void* data, std::function<void()> callback,
     renderer_settings.screenshot_requested = true;
 }
 
-void RendererBase::PopulateBackendInfo(Core::Frontend::WindowSystemType window_info,
-                                       std::vector<Core::Frontend::BackendInfo>& backend) {
-    OpenGL::RendererOpenGL::PopulateBackendInfo(backend);
+std::vector<Core::Frontend::BackendInfo> RendererBase::MakeBackendInfos(
+    Core::Frontend::WindowSystemType window_info) {
+    std::vector<Core::Frontend::BackendInfo> infos;
+    std::optional opengl_info = OpenGL::RendererOpenGL::MakeBackendInfo();
+    if (opengl_info) {
+        infos.push_back(std::move(*opengl_info));
+    }
 #ifdef HAS_VULKAN
-    Vulkan::RendererVulkan::PopulateBackendInfo(window_info, backend);
+    std::optional vulkan_info = Vulkan::RendererVulkan::MakeBackendInfo(window_info);
+    if (vulkan_info) {
+        infos.push_back(std::move(*vulkan_info));
+    }
 #endif
+    return infos;
 }
 
 } // namespace VideoCore

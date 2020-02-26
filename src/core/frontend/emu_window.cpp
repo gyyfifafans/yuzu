@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <mutex>
+#include "common/assert.h"
 #include "core/frontend/emu_window.h"
 #include "core/frontend/input.h"
 #include "core/settings.h"
@@ -109,9 +110,13 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height) 
     NotifyFramebufferLayoutChanged(Layout::DefaultFrameLayout(width, height));
 }
 
-BackendInfo& EmuWindow::GetBackendInfo(APIType type) {
-    auto it = std::find_if(possible_backends.begin(), possible_backends.end(),
-                           [type = type](const BackendInfo& b) { return b.api_type == type; });
+BackendInfo* EmuWindow::GetBackendInfo(APIType type) {
+    const auto it = std::find_if(possible_backends.begin(), possible_backends.end(),
+                                 [type](const BackendInfo& b) { return b.api_type == type; });
+    if (it == possible_backends.end()) {
+        return nullptr;
+    }
+    return &*it;
 }
 
 } // namespace Core::Frontend

@@ -478,8 +478,7 @@ bool GRenderWindow::ReloadRenderTarget() {
     show();
     hide();
 
-    possible_backends.clear();
-    VideoCore::RendererBase::PopulateBackendInfo(window_info.type, possible_backends);
+    possible_backends = VideoCore::RendererBase::MakeBackendInfos(window_info.type);
 
     resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
     child->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
@@ -543,14 +542,14 @@ bool GRenderWindow::InitializeOpenGL() {
 }
 
 bool GRenderWindow::InitializeVulkan() {
-#ifdef HAS_VULKAN
-    child = new GVKWidgetInternal(this);
-    return true;
-#else
-    QMessageBox::critical(this, tr("Vulkan not available!"),
-                          tr("yuzu has not been compiled with Vulkan support."));
-    return false;
-#endif
+    if constexpr (HAS_VULKAN) {
+        child = new GVKWidgetInternal(this);
+        return true;
+    } else {
+        QMessageBox::critical(this, tr("Vulkan not available!"),
+                              tr("yuzu has not been compiled with Vulkan support."));
+        return false;
+    }
 }
 
 bool GRenderWindow::LoadOpenGL() {

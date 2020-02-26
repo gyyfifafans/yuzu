@@ -3,10 +3,13 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <atomic>
 #include <string>
+#include <utility>
 
 namespace Common {
+
 /**
  * Provides a platform-independent interface for loading a dynamic library and retrieving symbols.
  * The interface maintains an internal reference count to allow one handle to be shared between
@@ -16,6 +19,17 @@ class DynamicLibrary final {
 public:
     // Default constructor, does not load a library.
     DynamicLibrary();
+
+    DynamicLibrary(const DynamicLibrary&) = delete;
+    DynamicLibrary& operator=(const DynamicLibrary&) = delete;
+
+    DynamicLibrary(DynamicLibrary&& rhs) noexcept
+        : m_handle{std::exchange(rhs.m_handle, nullptr)} {}
+
+    DynamicLibrary& operator=(DynamicLibrary&& rhs) noexcept {
+        m_handle = std::exchange(rhs.m_handle, nullptr);
+        return *this;
+    }
 
     // Automatically loads the specified library. Call IsOpen() to check validity before use.
     explicit DynamicLibrary(const char* filename);

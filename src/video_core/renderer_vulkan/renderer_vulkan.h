@@ -45,11 +45,11 @@ public:
     /// Initialize the renderer
     bool Init() override;
 
-    static void PopulateBackendInfo(Core::Frontend::WindowSystemType window_type,
-                                    std::vector<Core::Frontend::BackendInfo>&);
-
     /// Shutdown the renderer
     void ShutDown() override;
+
+    static std::optional<Core::Frontend::BackendInfo> MakeBackendInfo(
+        Core::Frontend::WindowSystemType window_type);
 
 private:
     std::optional<vk::DebugUtilsMessengerEXT> CreateDebugCallback(

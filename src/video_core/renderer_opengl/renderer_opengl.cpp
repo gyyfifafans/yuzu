@@ -480,14 +480,11 @@ bool RendererOpenGL::Init() {
 
 void RendererOpenGL::ShutDown() {}
 
-void RendererOpenGL::PopulateBackendInfo(std::vector<Core::Frontend::BackendInfo>& backend) {
+std::optional<Core::Frontend::BackendInfo> RendererOpenGL::MakeBackendInfo() {
     Core::Frontend::BackendInfo info;
     info.name = "OpenGL";
     info.api_type = Core::Frontend::APIType::OpenGL;
-    // For now, use a default un-opened library
-    info.dl = Common::DynamicLibrary();
-    info.adapters = {};
-    backend.emplace_back(std::move(info));
+    return info;
 }
 
 } // namespace OpenGL

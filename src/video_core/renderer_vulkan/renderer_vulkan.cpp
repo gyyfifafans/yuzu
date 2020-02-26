@@ -5,7 +5,9 @@
 #include <memory>
 #include <optional>
 #include <vector>
+
 #include <fmt/format.h>
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "common/telemetry.h"
@@ -31,25 +33,6 @@ namespace Vulkan {
 
 namespace {
 
-void OpenVulkanLibrary(Common::DynamicLibrary& dl) {
-#ifdef __APPLE__
-    // Check if a path to a specific Vulkan library has been specified.
-    char* libvulkan_env = getenv("LIBVULKAN_PATH");
-    if (!libvulkan_env || !dl.Open(libvulkan_env)) {
-        // Use the libvulkan.dylib from the application bundle.
-        std::string filename = File::GetBundleDirectory() + "/Contents/Frameworks/libvulkan.dylib";
-        dl.Open(filename.c_str());
-    }
-#else
-    std::string filename = Common::DynamicLibrary::GetVersionedFilename("vulkan", 1);
-    if (!dl.Open(filename.c_str())) {
-        // Android devices may not have libvulkan.so.1, only libvulkan.so.
-        filename = Common::DynamicLibrary::GetVersionedFilename("vulkan");
-        dl.Open(filename.c_str());
-    }
-#endif
-}
-
 VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity_,
                        VkDebugUtilsMessageTypeFlagsEXT type,
                        const VkDebugUtilsMessengerCallbackDataEXT* data,
@@ -67,6 +50,27 @@ VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity_,
         LOG_DEBUG(Render_Vulkan, "{}", message);
     }
     return VK_FALSE;
+}
+
+Common::DynamicLibrary OpenVulkanLibrary() {
+    Common::DynamicLibrary dl;
+#ifdef __APPLE__
+    // Check if a path to a specific Vulkan library has been specified.
+    char* libvulkan_env = getenv("LIBVULKAN_PATH");
+    if (!libvulkan_env || !dl.Open(libvulkan_env)) {
+        // Use the libvulkan.dylib from the application bundle.
+        std::string filename = File::GetBundleDirectory() + "/Contents/Frameworks/libvulkan.dylib";
+        dl.Open(filename.c_str());
+    }
+#else
+    std::string filename = Common::DynamicLibrary::GetVersionedFilename("vulkan", 1);
+    if (!dl.Open(filename.c_str())) {
+        // Android devices may not have libvulkan.so.1, only libvulkan.so.
+        filename = Common::DynamicLibrary::GetVersionedFilename("vulkan");
+        dl.Open(filename.c_str());
+    }
+#endif
+    return dl;
 }
 
 std::string GetReadableVersion(u32 version) {
@@ -136,10 +140,9 @@ bool SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
             extension_list->push_back(name);
             return true;
         }
-
-        if (required)
+        if (required) {
             LOG_ERROR(Render_Vulkan, "Vulkan: Missing required extension {}.", name);
-
+        }
         return false;
     };
 
@@ -156,10 +159,15 @@ bool SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
     }
 #endif
 
+    if (!AddExtension(VK_KHR_SURFACE_EXTENSION_NAME, true)) {
+        return false;
+    }
+
     // VK_EXT_debug_report
-    if (enable_debug_report && !AddExtension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME, false))
+    if (enable_debug_report && !AddExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, false)) {
         LOG_WARNING(Render_Vulkan,
                     "Vulkan: Debug report requested, but extension is not available.");
+    }
 
     AddExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, false);
     AddExtension(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, false);
@@ -169,9 +177,9 @@ bool SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
 
 vk::Instance CreateVulkanInstance(const vk::DispatchLoaderDynamic& dldi,
                                   const Core::Frontend::WindowSystemType& wstype,
-                                  bool enable_debug_report, bool enable_validation_layer) {
+                                  bool enable_debug) {
     std::vector<const char*> enabled_extensions;
-    if (!SelectInstanceExtensions(dldi, &enabled_extensions, wstype, enable_debug_report))
+    if (!SelectInstanceExtensions(dldi, &enabled_extensions, wstype, enable_debug))
         return nullptr;
 
     if (vk::enumerateInstanceVersion(dldi) < VK_MAKE_VERSION(1, 1, 0)) {
@@ -197,7 +205,7 @@ vk::Instance CreateVulkanInstance(const vk::DispatchLoaderDynamic& dldi,
     instance_create_info.ppEnabledLayerNames = nullptr;
 
     // Enable debug layer on debug builds
-    if (enable_validation_layer) {
+    if (enable_debug) {
         static const char* layer_names[] = {"VK_LAYER_LUNARG_standard_validation"};
         instance_create_info.enabledLayerCount = 1;
         instance_create_info.ppEnabledLayerNames = layer_names;
@@ -252,42 +260,32 @@ void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
     render_window.PollEvents();
 }
 
-void RendererVulkan::PopulateBackendInfo(Core::Frontend::WindowSystemType window_type,
-                                         std::vector<Core::Frontend::BackendInfo>& backend_info) {
+std::optional<Core::Frontend::BackendInfo> RendererVulkan::MakeBackendInfo(
+    Core::Frontend::WindowSystemType window_type) {
     Core::Frontend::BackendInfo info;
     info.name = "Vulkan";
     info.api_type = Core::Frontend::APIType::Vulkan;
-    OpenVulkanLibrary(info.dl);
-    info.adapters = {};
-
+    info.dl = OpenVulkanLibrary();
     if (!info.dl.IsOpen()) {
-        return;
+        return {};
     }
 
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
     if (!info.dl.GetSymbol("vkGetInstanceProcAddr", &vkGetInstanceProcAddr)) {
-        return;
-    }
-
-    if (!vkGetInstanceProcAddr) {
-        return;
+        return {};
     }
 
     vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
-
-    auto instance = CreateVulkanInstance(dldi, window_type, Settings::values.renderer_debug, false);
+    auto instance = CreateVulkanInstance(dldi, window_type, Settings::values.renderer_debug);
     if (!instance) {
-        return;
+        return {};
     }
     dldi.init(instance);
 
-    auto physical_devices = instance.enumeratePhysicalDevices(dldi);
-
-    for (const auto physical_device : physical_devices) {
-        VkPhysicalDeviceProperties properties = physical_device.getProperties(dldi);
-        info.adapters.push_back(properties.deviceName);
+    for (const auto physical_device : instance.enumeratePhysicalDevices(dldi)) {
+        info.adapters.push_back(physical_device.getProperties(dldi).deviceName);
     }
-    backend_info.emplace_back(info);
+    return info;
 }
 
 bool RendererVulkan::Init() {
@@ -306,7 +304,7 @@ bool RendererVulkan::Init() {
     // TODO turn on validation layers
     if (!instance) {
         instance = CreateVulkanInstance(dldi, render_window.GetWindowInfo().type,
-                                        Settings::values.renderer_debug, false);
+                                        Settings::values.renderer_debug);
     }
     if (!instance) {
         return false;
@@ -319,6 +317,16 @@ bool RendererVulkan::Init() {
         if (!callback) {
             return false;
         }
+    }
+
+    const HWND hWnd = static_cast<HWND>(render_window.GetWindowInfo().render_surface);
+    const HINSTANCE hInstance = reinterpret_cast<HINSTANCE>(GetWindowLongPtr(hWnd, -6));
+
+    const vk::Win32SurfaceCreateInfoKHR win32_ci({}, hInstance, hWnd);
+    const vk::Result result = instance.createWin32SurfaceKHR(&win32_ci, nullptr, &surface, dldi);
+    if (result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Ooops");
+        return false;
     }
 
     if (!PickDevices(dldi)) {

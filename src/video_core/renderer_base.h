@@ -44,8 +44,8 @@ public:
     /// Shutdown the renderer
     virtual void ShutDown() = 0;
 
-    static void PopulateBackendInfo(Core::Frontend::WindowSystemType window_type,
-                                    std::vector<Core::Frontend::BackendInfo>&);
+    static std::vector<Core::Frontend::BackendInfo> MakeBackendInfos(
+        Core::Frontend::WindowSystemType window_type);
 
     // Getter/setter functions:
     // ------------------------

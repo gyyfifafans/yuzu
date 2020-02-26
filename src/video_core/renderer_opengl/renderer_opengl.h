@@ -4,8 +4,11 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
+
 #include <glad/glad.h>
+
 #include "common/common_types.h"
 #include "common/math_util.h"
 #include "video_core/renderer_base.h"
@@ -58,7 +61,7 @@ public:
     /// Shutdown the renderer
     void ShutDown() override;
 
-    static void PopulateBackendInfo(std::vector<Core::Frontend::BackendInfo>& backend);
+    static std::optional<Core::Frontend::BackendInfo> MakeBackendInfo();
 
 private:
     /// Initializes the OpenGL state and creates persistent objects.

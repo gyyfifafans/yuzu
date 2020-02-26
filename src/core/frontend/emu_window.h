@@ -170,7 +170,7 @@ public:
     /**
      * Retrieves the current backend info for a renderer backend by api type
      */
-    std::optional<BackendInfo> GetBackendInfo(APIType);
+    BackendInfo* GetBackendInfo(APIType);
 
 protected:
     EmuWindow(WindowSystemInfo = {});
