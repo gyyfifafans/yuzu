@@ -14,9 +14,7 @@
 #include <QScreen>
 #include <QStringList>
 #include <QWindow>
-
 #include <fmt/format.h>
-
 #include "common/assert.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
@@ -216,7 +214,6 @@ class GVKWidgetInternal final : public GWidgetInternal {
 public:
     GVKWidgetInternal(GRenderWindow* parent) : GWidgetInternal(parent) {
         setSurfaceType(QSurface::SurfaceType::VulkanSurface);
-        // setVulkanInstance(instance);
     }
     ~GVKWidgetInternal() override = default;
 };
@@ -265,6 +262,7 @@ GRenderWindow::GRenderWindow(GMainWindow* parent, EmuThread* emu_thread)
     setAttribute(Qt::WA_AcceptTouchEvents);
 
     InputCommon::Init();
+    ReloadRenderTarget();
     connect(this, &GRenderWindow::FirstFrameDisplayed, parent, &GMainWindow::OnLoadComplete);
 }
 
@@ -435,7 +433,7 @@ std::unique_ptr<Core::Frontend::GraphicsContext> GRenderWindow::CreateSharedCont
     return std::make_unique<GGLContext>(context.get());
 }
 
-bool GRenderWindow::InitRenderTarget() {
+bool GRenderWindow::ReloadRenderTarget() {
     shared_context.reset();
     context.reset();
     if (child) {
@@ -460,10 +458,10 @@ bool GRenderWindow::InitRenderTarget() {
         if (!InitializeVulkan()) {
             return false;
         }
-        // Update the Window System information with the new render target
-        window_info = GetWindowSystemInfo(child);
         break;
     }
+    // Update the Window System information with the new render target
+    window_info = GetWindowSystemInfo(child);
 
     container = QWidget::createWindowContainer(child, this);
     QBoxLayout* layout = new QHBoxLayout(this);
@@ -479,6 +477,9 @@ bool GRenderWindow::InitRenderTarget() {
     // the widget to be shown yet, so immediately hide it.
     show();
     hide();
+
+    possible_backends.clear();
+    VideoCore::RendererBase::PopulateBackendInfo(window_info.type, possible_backends);
 
     resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);
     child->resize(Layout::ScreenUndocked::Width, Layout::ScreenUndocked::Height);

@@ -12,10 +12,30 @@ namespace Vulkan {
 constexpr vk::DispatchLoaderDynamic* dont_use_me_dld = nullptr;
 }
 
+#if defined(WIN32)
+#define VK_USE_PLATFORM_WIN32_KHR 1
+#endif
+
+#if defined(HAVE_X11)
+#define VK_USE_PLATFORM_XLIB_KHR
+#endif
+
+#if defined(ANDROID)
+#define VK_USE_PLATFORM_ANDROID_KHR
+#endif
+
+#if defined(__APPLE__)
+#define VK_USE_PLATFORM_MACOS_MVK
+#endif
+
+#define VK_NO_PROTOTYPES
 #define VULKAN_HPP_DEFAULT_DISPATCHER (*::Vulkan::dont_use_me_dld)
 #define VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL 0
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+
+#undef near
+#undef far
 
 namespace Vulkan {
 

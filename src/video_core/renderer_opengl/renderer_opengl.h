@@ -53,12 +53,12 @@ public:
     void SwapBuffers(const Tegra::FramebufferConfig* framebuffer) override;
 
     /// Initialize the renderer
-    bool Init(Common::DynamicLibrary dl) override;
+    bool Init() override;
 
     /// Shutdown the renderer
     void ShutDown() override;
 
-    void PopulateBackendInfo(Common::DynamicLibrary dl, Core::Frontend::BackendInfo&) override;
+    static void PopulateBackendInfo(std::vector<Core::Frontend::BackendInfo>& backend);
 
 private:
     /// Initializes the OpenGL state and creates persistent objects.

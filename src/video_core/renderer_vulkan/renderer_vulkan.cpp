@@ -5,9 +5,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
-
 #include <fmt/format.h>
-
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "common/telemetry.h"
@@ -32,6 +30,25 @@
 namespace Vulkan {
 
 namespace {
+
+void OpenVulkanLibrary(Common::DynamicLibrary& dl) {
+#ifdef __APPLE__
+    // Check if a path to a specific Vulkan library has been specified.
+    char* libvulkan_env = getenv("LIBVULKAN_PATH");
+    if (!libvulkan_env || !dl.Open(libvulkan_env)) {
+        // Use the libvulkan.dylib from the application bundle.
+        std::string filename = File::GetBundleDirectory() + "/Contents/Frameworks/libvulkan.dylib";
+        dl.Open(filename.c_str());
+    }
+#else
+    std::string filename = Common::DynamicLibrary::GetVersionedFilename("vulkan", 1);
+    if (!dl.Open(filename.c_str())) {
+        // Android devices may not have libvulkan.so.1, only libvulkan.so.
+        filename = Common::DynamicLibrary::GetVersionedFilename("vulkan");
+        dl.Open(filename.c_str());
+    }
+#endif
+}
 
 VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity_,
                        VkDebugUtilsMessageTypeFlagsEXT type,
@@ -96,49 +113,10 @@ std::string BuildCommaSeparatedExtensions(std::vector<std::string> available_ext
     return separated_extensions;
 }
 
-} // Anonymous namespace
-
-RendererVulkan::RendererVulkan(Core::Frontend::EmuWindow& window, Core::System& system)
-    : RendererBase(window), system{system} {}
-
-RendererVulkan::~RendererVulkan() {
-    ShutDown();
-}
-
-void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
-    const auto& layout = render_window.GetFramebufferLayout();
-    if (framebuffer && layout.width > 0 && layout.height > 0 && render_window.IsShown()) {
-        const VAddr framebuffer_addr = framebuffer->address + framebuffer->offset;
-        const bool use_accelerated =
-            rasterizer->AccelerateDisplay(*framebuffer, framebuffer_addr, framebuffer->stride);
-        const bool is_srgb = use_accelerated && screen_info.is_srgb;
-        if (swapchain->HasFramebufferChanged(layout) || swapchain->GetSrgbState() != is_srgb) {
-            swapchain->Create(layout.width, layout.height, is_srgb);
-            blit_screen->Recreate();
-        }
-
-        scheduler->WaitWorker();
-
-        swapchain->AcquireNextImage();
-        const auto [fence, render_semaphore] = blit_screen->Draw(*framebuffer, use_accelerated);
-
-        scheduler->Flush(false, render_semaphore);
-
-        if (swapchain->Present(render_semaphore, fence)) {
-            blit_screen->Recreate();
-        }
-
-        render_window.SwapBuffers();
-        rasterizer->TickFrame();
-    }
-
-    render_window.PollEvents();
-}
-
-bool RendererVulkan::SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
-                                              std::vector<const char*>* extension_list,
-                                              const Core::Frontend::WindowSystemType& wstype,
-                                              bool enable_debug_report) {
+bool SelectInstanceExtensions(const vk::DispatchLoaderDynamic& dldi,
+                              std::vector<const char*>* extension_list,
+                              const Core::Frontend::WindowSystemType& wstype,
+                              bool enable_debug_report) {
     auto available_extension_list = vk::enumerateInstanceExtensionProperties(nullptr, dldi);
 
     if (available_extension_list.size() == 0) {
@@ -189,16 +167,16 @@ bool RendererVulkan::SelectInstanceExtensions(const vk::DispatchLoaderDynamic& d
     return true;
 }
 
-vk::Instance RendererVulkan::CreateVulkanInstance(const vk::DispatchLoaderDynamic& dldi,
-                                                  const Core::Frontend::WindowSystemType& wstype,
-                                                  bool enable_debug_report,
-                                                  bool enable_validation_layer) {
+vk::Instance CreateVulkanInstance(const vk::DispatchLoaderDynamic& dldi,
+                                  const Core::Frontend::WindowSystemType& wstype,
+                                  bool enable_debug_report, bool enable_validation_layer) {
     std::vector<const char*> enabled_extensions;
     if (!SelectInstanceExtensions(dldi, &enabled_extensions, wstype, enable_debug_report))
         return nullptr;
 
     if (vk::enumerateInstanceVersion(dldi) < VK_MAKE_VERSION(1, 1, 0)) {
         LOG_ERROR(Render_Vulkan, "Vulkan 1.1 is not susupported! Try updating your drivers");
+        return nullptr;
     }
 
     vk::ApplicationInfo app_info = {};
@@ -235,42 +213,105 @@ vk::Instance RendererVulkan::CreateVulkanInstance(const vk::DispatchLoaderDynami
     return instance;
 }
 
-void RendererVulkan::PopulateBackendInfo(Common::DynamicLibrary dl,
-                                         Core::Frontend::BackendInfo& info) {
-    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
-        static_cast<PFN_vkGetInstanceProcAddr>(dl.GetSymbolAddress("vkGetInstanceProcAddr"));
+} // Anonymous namespace
 
-    const vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
+RendererVulkan::RendererVulkan(Core::Frontend::EmuWindow& window, Core::System& system)
+    : RendererBase(window), system{system} {}
 
-    if (!instance) {
-        instance = CreateVulkanInstance(dldi, render_window.GetWindowInfo().type,
-                                        Settings::values.renderer_debug, false);
+RendererVulkan::~RendererVulkan() {
+    ShutDown();
+}
+
+void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
+    const auto& layout = render_window.GetFramebufferLayout();
+    if (framebuffer && layout.width > 0 && layout.height > 0 && render_window.IsShown()) {
+        const VAddr framebuffer_addr = framebuffer->address + framebuffer->offset;
+        const bool use_accelerated =
+            rasterizer->AccelerateDisplay(*framebuffer, framebuffer_addr, framebuffer->stride);
+        const bool is_srgb = use_accelerated && screen_info.is_srgb;
+        if (swapchain->HasFramebufferChanged(layout) || swapchain->GetSrgbState() != is_srgb) {
+            swapchain->Create(layout.width, layout.height, is_srgb);
+            blit_screen->Recreate();
+        }
+
+        scheduler->WaitWorker();
+
+        swapchain->AcquireNextImage();
+        const auto [fence, render_semaphore] = blit_screen->Draw(*framebuffer, use_accelerated);
+
+        scheduler->Flush(false, render_semaphore);
+
+        if (swapchain->Present(render_semaphore, fence)) {
+            blit_screen->Recreate();
+        }
+
+        render_window.SwapBuffers();
+        rasterizer->TickFrame();
     }
-    if (!instance) {
-        info.api_type = Core::Frontend::APIType::Nothing;
+
+    render_window.PollEvents();
+}
+
+void RendererVulkan::PopulateBackendInfo(Core::Frontend::WindowSystemType window_type,
+                                         std::vector<Core::Frontend::BackendInfo>& backend_info) {
+    Core::Frontend::BackendInfo info;
+    info.name = "Vulkan";
+    info.api_type = Core::Frontend::APIType::Vulkan;
+    OpenVulkanLibrary(info.dl);
+    info.adapters = {};
+
+    if (!info.dl.IsOpen()) {
+        return;
     }
+
+    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
+    if (!info.dl.GetSymbol("vkGetInstanceProcAddr", &vkGetInstanceProcAddr)) {
+        return;
+    }
+
+    if (!vkGetInstanceProcAddr) {
+        return;
+    }
+
+    vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
+
+    auto instance = CreateVulkanInstance(dldi, window_type, Settings::values.renderer_debug, false);
+    if (!instance) {
+        return;
+    }
+    dldi.init(instance);
 
     auto physical_devices = instance.enumeratePhysicalDevices(dldi);
 
     for (const auto physical_device : physical_devices) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(physical_device, &properties);
+        VkPhysicalDeviceProperties properties = physical_device.getProperties(dldi);
         info.adapters.push_back(properties.deviceName);
     }
-    info.api_type = Core::Frontend::APIType::Vulkan;
+    backend_info.emplace_back(info);
 }
 
-bool RendererVulkan::Init(Common::DynamicLibrary dl) {
-    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
-        static_cast<PFN_vkGetInstanceProcAddr>(dl.GetSymbolAddress("vkGetInstanceProcAddr"));
+bool RendererVulkan::Init() {
+    auto backend_info = render_window.GetBackendInfo(Core::Frontend::APIType::Vulkan);
+    if (!backend_info) {
+        return false;
+    }
 
-    const vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
+    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
+    if (!backend_info->dl.GetSymbol("vkGetInstanceProcAddr", &vkGetInstanceProcAddr)) {
+        return false;
+    }
+
+    vk::DispatchLoaderDynamic dldi(vkGetInstanceProcAddr);
 
     // TODO turn on validation layers
     if (!instance) {
         instance = CreateVulkanInstance(dldi, render_window.GetWindowInfo().type,
                                         Settings::values.renderer_debug, false);
     }
+    if (!instance) {
+        return false;
+    }
+    dldi.init(instance);
 
     std::optional<vk::DebugUtilsMessengerEXT> callback;
     if (Settings::values.renderer_debug && dldi.vkCreateDebugUtilsMessengerEXT) {

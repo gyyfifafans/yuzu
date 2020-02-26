@@ -458,7 +458,7 @@ void RendererOpenGL::CaptureScreenshot() {
     renderer_settings.screenshot_requested = false;
 }
 
-bool RendererOpenGL::Init(Common::DynamicLibrary dl) {
+bool RendererOpenGL::Init() {
     Core::Frontend::ScopeAcquireWindowContext acquire_context{render_window};
 
     if (GLAD_GL_KHR_debug) {
@@ -480,9 +480,14 @@ bool RendererOpenGL::Init(Common::DynamicLibrary dl) {
 
 void RendererOpenGL::ShutDown() {}
 
-void RendererOpenGL::PopulateBackendInfo(Common::DynamicLibrary dl,
-                                         Core::Frontend::BackendInfo& info) {
+void RendererOpenGL::PopulateBackendInfo(std::vector<Core::Frontend::BackendInfo>& backend) {
+    Core::Frontend::BackendInfo info;
+    info.name = "OpenGL";
     info.api_type = Core::Frontend::APIType::OpenGL;
+    // For now, use a default un-opened library
+    info.dl = Common::DynamicLibrary();
+    info.adapters = {};
+    backend.emplace_back(std::move(info));
 }
 
 } // namespace OpenGL

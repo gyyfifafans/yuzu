@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -23,16 +24,29 @@ enum class WindowSystemType {
     Wayland,
 };
 
+/// List of enum
+/// This isn't meant to be an exhaustive list of renderer backends, rather this represents the
+/// different API's that the backends can use for rendering
 enum class APIType {
-    Nothing,
-    OpenGL,
-    Vulkan,
+    Nothing = -1,
+    OpenGL = 0,
+    Vulkan = 1,
 };
 
+/// Information for the backends that the frontend should hold a reference to. This information is
+/// "static" and can be persisted between emulator runs (hence why it is part of the EmuWindow and
+/// not the RendererBackend)
 struct BackendInfo {
+    /// Name of the renderer backend (usually the same as the API type)
+    std::string name;
+    /// Which graphics API this backend uses
     APIType api_type;
+    /// Reference to the shared library that powers this backend.
+    Common::DynamicLibrary dl;
+    /// List of display adapaters that this backend supports rendering to. Empty if this isn't
+    /// modifiable
     std::vector<std::string> adapters;
-    // TODO: add supported feature detection here
+    // TODO: add supported feature detection here (extensions)
 };
 
 /**
@@ -153,6 +167,11 @@ public:
      */
     void UpdateCurrentFramebufferLayout(unsigned width, unsigned height);
 
+    /**
+     * Retrieves the current backend info for a renderer backend by api type
+     */
+    std::optional<BackendInfo> GetBackendInfo(APIType);
+
 protected:
     EmuWindow(WindowSystemInfo = {});
     virtual ~EmuWindow();
@@ -166,6 +185,7 @@ protected:
     }
 
     WindowSystemInfo window_info;
+    std::vector<BackendInfo> possible_backends;
 
 private:
     Layout::FramebufferLayout framebuffer_layout; ///< Current framebuffer layout

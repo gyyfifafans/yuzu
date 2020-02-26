@@ -4,16 +4,15 @@
 
 #include <QColorDialog>
 #include <QComboBox>
-#ifdef HAS_VULKAN
-#include <QVulkanInstance>
-#endif
-
 #include "common/common_types.h"
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "core/settings.h"
 #include "ui_configure_graphics.h"
+#include "video_core/renderer_base.h"
+#include "yuzu/bootmanager.h"
 #include "yuzu/configuration/configure_graphics.h"
+#include "yuzu/main.h"
 
 namespace {
 enum class Resolution : int {
@@ -59,7 +58,16 @@ Resolution FromResolutionFactor(float factor) {
 ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     : QWidget(parent), ui(new Ui::ConfigureGraphics) {
     vulkan_device = Settings::values.vulkan_device;
-    vulkan_devices = RenderBase();
+
+    GMainWindow* main;
+    for (QWidget* w : qApp->topLevelWidgets()) {
+        if (main = qobject_cast<GMainWindow*>(w)) {
+            break;
+        }
+    }
+    vulkan_devices = {};
+    if (auto* emu_window = main->findChild<GRenderWindow*>())
+        vulkan_devices = emu_window->GetBackendInfo(Core::Frontend::APIType::Vulkan)->adapters;
 
     ui->setupUi(this);
 
@@ -159,7 +167,7 @@ void ConfigureGraphics::UpdateDeviceComboBox() {
         break;
     case Settings::RendererBackend::Vulkan:
         for (const auto device : vulkan_devices) {
-            ui->device->addItem(device);
+            ui->device->addItem(QString::fromStdString(device));
         }
         ui->device->setCurrentIndex(vulkan_device);
         enabled = !vulkan_devices.empty();

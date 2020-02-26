@@ -109,4 +109,9 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height) 
     NotifyFramebufferLayoutChanged(Layout::DefaultFrameLayout(width, height));
 }
 
+BackendInfo& EmuWindow::GetBackendInfo(APIType type) {
+    auto it = std::find_if(possible_backends.begin(), possible_backends.end(),
+                           [type = type](const BackendInfo& b) { return b.api_type == type; });
+}
+
 } // namespace Core::Frontend
