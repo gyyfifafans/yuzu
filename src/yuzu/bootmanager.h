@@ -149,7 +149,7 @@ public:
     bool event(QEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
 
-    bool InitRenderTarget();
+    bool ReloadRenderTarget();
 
     void CaptureScreenshot(u32 res_scale, const QString& screenshot_path);
 

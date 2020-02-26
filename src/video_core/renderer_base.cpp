@@ -6,6 +6,10 @@
 #include "core/frontend/emu_window.h"
 #include "core/settings.h"
 #include "video_core/renderer_base.h"
+#include "video_core/renderer_opengl/renderer_opengl.h"
+#ifdef HAS_VULKAN
+#include "video_core/renderer_vulkan/renderer_vulkan.h"
+#endif
 
 namespace VideoCore {
 
@@ -38,6 +42,14 @@ void RendererBase::RequestScreenshot(void* data, std::function<void()> callback,
     renderer_settings.screenshot_complete_callback = std::move(callback);
     renderer_settings.screenshot_framebuffer_layout = layout;
     renderer_settings.screenshot_requested = true;
+}
+
+void RendererBase::PopulateBackendInfo(Core::Frontend::WindowSystemType window_info,
+                                       std::vector<Core::Frontend::BackendInfo>& backend) {
+    OpenGL::RendererOpenGL::PopulateBackendInfo(backend);
+#ifdef HAS_VULKAN
+    Vulkan::RendererVulkan::PopulateBackendInfo(window_info, backend);
+#endif
 }
 
 } // namespace VideoCore

@@ -18,7 +18,6 @@
 #include "yuzu/compatibility_list.h"
 #include "yuzu/hotkeys.h"
 
-class Backends;
 class Config;
 class EmuThread;
 class GameList;
@@ -256,8 +255,6 @@ private:
     QStringList default_theme_paths;
 
     HotkeyRegistry hotkey_registry;
-
-    std::unique_ptr<Backends> backend_info;
 
 protected:
     void dropEvent(QDropEvent* event) override;
