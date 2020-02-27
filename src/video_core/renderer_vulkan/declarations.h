@@ -17,6 +17,10 @@ constexpr vk::DispatchLoaderDynamic* dont_use_me_dld = nullptr;
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 
+#ifdef __APPLE__
+#include <MoltenVK/vk_mvk_moltenvk.h>
+#endif
+
 namespace Vulkan {
 
 // vulkan.hpp unique handlers use DispatchLoaderStatic

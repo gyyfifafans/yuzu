@@ -215,7 +215,7 @@ VKComputePass::VKComputePass(const VKDevice& device, VKDescriptorPool& descripto
             {}, static_cast<u32>(templates.size()), templates.data(),
             vk::DescriptorUpdateTemplateType::eDescriptorSet, *descriptor_set_layout,
             vk::PipelineBindPoint::eGraphics, *layout, 0);
-        descriptor_template = dev.createDescriptorUpdateTemplateUnique(template_ci, nullptr, dld);
+        descriptor_template = dev.createDescriptorUpdateTemplateKHRUnique(template_ci, nullptr, dld);
 
         descriptor_allocator.emplace(descriptor_pool, *descriptor_set_layout);
     }

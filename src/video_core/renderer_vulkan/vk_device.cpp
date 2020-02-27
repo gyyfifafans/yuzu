@@ -16,6 +16,7 @@
 #include "video_core/renderer_vulkan/declarations.h"
 #include "video_core/renderer_vulkan/vk_device.h"
 
+
 namespace Vulkan {
 
 namespace {
@@ -40,7 +41,7 @@ T GetFeatures(vk::PhysicalDevice physical, const vk::DispatchLoaderDynamic& dld)
     vk::PhysicalDeviceFeatures2 features;
     T extension_features;
     features.pNext = &extension_features;
-    physical.getFeatures2(&features, dld);
+    physical.getFeatures2KHR(&features, dld);
     return extension_features;
 }
 
@@ -49,7 +50,7 @@ T GetProperties(vk::PhysicalDevice physical, const vk::DispatchLoaderDynamic& dl
     vk::PhysicalDeviceProperties2 properties;
     T extension_properties;
     properties.pNext = &extension_properties;
-    physical.getProperties2(&properties, dld);
+    physical.getProperties2KHR(&properties, dld);
     return extension_properties;
 }
 
@@ -103,7 +104,7 @@ bool VKDevice::Create(vk::Instance instance) {
     features.largePoints = true;
     features.multiViewport = true;
     features.depthBiasClamp = true;
-    features.geometryShader = true;
+    //features.geometryShader = true;
     features.tessellationShader = true;
     features.occlusionQueryPrecise = true;
     features.fragmentStoresAndAtomics = true;
@@ -280,10 +281,10 @@ bool VKDevice::IsSuitable(vk::PhysicalDevice physical, vk::SurfaceKHR surface,
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
         VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
-        VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME,
+        //VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME,
         VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME,
-        VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME,
-        VK_EXT_SHADER_SUBGROUP_VOTE_EXTENSION_NAME,
+        //VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME,
+        //VK_EXT_SHADER_SUBGROUP_VOTE_EXTENSION_NAME,
         VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
     };
     bool is_suitable = true;
@@ -351,7 +352,7 @@ bool VKDevice::IsSuitable(vk::PhysicalDevice physical, vk::SurfaceKHR surface,
         std::make_pair(features.largePoints, "largePoints"),
         std::make_pair(features.multiViewport, "multiViewport"),
         std::make_pair(features.depthBiasClamp, "depthBiasClamp"),
-        std::make_pair(features.geometryShader, "geometryShader"),
+        //std::make_pair(features.geometryShader, "geometryShader"),
         std::make_pair(features.tessellationShader, "tessellationShader"),
         std::make_pair(features.occlusionQueryPrecise, "occlusionQueryPrecise"),
         std::make_pair(features.fragmentStoresAndAtomics, "fragmentStoresAndAtomics"),
@@ -394,10 +395,10 @@ std::vector<const char*> VKDevice::LoadExtensions() {
     extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     extensions.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
     extensions.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-    extensions.push_back(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
+    //extensions.push_back(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
     extensions.push_back(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
-    extensions.push_back(VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME);
-    extensions.push_back(VK_EXT_SHADER_SUBGROUP_VOTE_EXTENSION_NAME);
+    //extensions.push_back(VK_EXT_SHADER_SUBGROUP_BALLOT_EXTENSION_NAME);
+    //extensions.push_back(VK_EXT_SHADER_SUBGROUP_VOTE_EXTENSION_NAME);
     extensions.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
 
     [[maybe_unused]] const bool nsight =
