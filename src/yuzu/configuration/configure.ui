@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>382</width>
-    <height>650</height>
+    <width>407</width>
+    <height>700</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>0</width>
-    <height>650</height>
+    <height>700</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -68,7 +68,7 @@
          <string>Filesystem</string>
         </attribute>
        </widget>
-       <widget class="ConfigureInputSimple" name="inputTab">
+       <widget class="ConfigureInput" name="inputTab">
         <attribute name="title">
          <string>Input</string>
         </attribute>
@@ -183,9 +183,9 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>ConfigureInputSimple</class>
+   <class>ConfigureInput</class>
    <extends>QWidget</extends>
-   <header>configuration/configure_input_simple.h</header>
+   <header>configuration/configure_input.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

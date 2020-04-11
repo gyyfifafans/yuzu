@@ -80,6 +80,49 @@ std::string GenerateAnalogParamFromKeys(int key_up, int key_down, int key_left, 
     return circle_pad_param.Serialize();
 }
 
+std::vector<Common::ParamPackage> GetInputDevices() {
+    std::vector<Common::ParamPackage> devices = {
+        Common::ParamPackage{{"display", "Any"}, {"class", "any"}},
+        Common::ParamPackage{{"display", "Keyboard"}, {"class", "key"}},
+    };
+    auto sdl_devices = sdl->GetInputDevices();
+    auto udp_devices = udp->GetInputDevices();
+    devices.insert(devices.end(), sdl_devices.begin(), sdl_devices.end());
+    devices.insert(devices.end(), udp_devices.begin(), udp_devices.end());
+    return devices;
+}
+
+std::unordered_map<Settings::NativeButton::Values, Common::ParamPackage> GetButtonMappingForDevice(
+    const Common::ParamPackage& params) {
+    std::unordered_map<Settings::NativeButton::Values, Common::ParamPackage> mappings{};
+    if (!params.Has("class") || params.Get("class", "") == "any") {
+        return mappings;
+    }
+    if (params.Get("class", "") == "key") {
+        // TODO consider returing the SDL key codes for the default keybindings
+    }
+    if (params.Get("class", "") == "sdl") {
+        return sdl->GetButtonMappingForDevice(params);
+    }
+    return mappings;
+}
+
+std::unordered_map<Settings::NativeAnalog::Values, Common::ParamPackage> GetAnalogMappingForDevice(
+    const Common::ParamPackage& params) {
+    std::unordered_map<Settings::NativeAnalog::Values, Common::ParamPackage> mappings{};
+    if (!params.Has("class") || params.Get("class", "") == "any") {
+        return mappings;
+    }
+    if (params.Get("class", "") == "key") {
+        // TODO consider returing the SDL key codes for the default keybindings
+        return mappings;
+    }
+    if (params.Get("class", "") == "sdl") {
+        return sdl->GetAnalogMappingForDevice(params);
+    }
+    return mappings;
+}
+
 namespace Polling {
 
 std::vector<std::unique_ptr<DevicePoller>> GetPollers(DeviceType type) {

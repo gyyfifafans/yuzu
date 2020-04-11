@@ -27,10 +27,9 @@ Config::~Config() {
 }
 
 const std::array<int, Settings::NativeButton::NumButtons> Config::default_buttons = {
-    Qt::Key_A, Qt::Key_S, Qt::Key_Z,    Qt::Key_X,  Qt::Key_3,     Qt::Key_4,    Qt::Key_Q,
-    Qt::Key_W, Qt::Key_1, Qt::Key_2,    Qt::Key_N,  Qt::Key_M,     Qt::Key_F,    Qt::Key_T,
-    Qt::Key_H, Qt::Key_G, Qt::Key_Left, Qt::Key_Up, Qt::Key_Right, Qt::Key_Down, Qt::Key_J,
-    Qt::Key_I, Qt::Key_L, Qt::Key_K,    Qt::Key_D,  Qt::Key_C,     Qt::Key_B,    Qt::Key_V,
+    Qt::Key_A, Qt::Key_S, Qt::Key_Z, Qt::Key_X, Qt::Key_3, Qt::Key_4, Qt::Key_Q,
+    Qt::Key_W, Qt::Key_1, Qt::Key_2, Qt::Key_N, Qt::Key_M, Qt::Key_F, Qt::Key_T,
+    Qt::Key_H, Qt::Key_G, Qt::Key_D, Qt::Key_C, Qt::Key_B, Qt::Key_V,
 };
 
 const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> Config::default_analogs{{
@@ -240,7 +239,7 @@ void Config::ReadPlayerValues() {
         player.type = static_cast<Settings::ControllerType>(
             qt_config
                 ->value(QStringLiteral("player_%1_type").arg(p),
-                        static_cast<u8>(Settings::ControllerType::DualJoycon))
+                        static_cast<u8>(Settings::ControllerType::ProController))
                 .toUInt());
 
         player.body_color_left = qt_config
@@ -394,7 +393,7 @@ void Config::ReadTouchscreenValues() {
 void Config::ApplyDefaultProfileIfInputInvalid() {
     if (!std::any_of(Settings::values.players.begin(), Settings::values.players.end(),
                      [](const Settings::PlayerInput& in) { return in.connected; })) {
-        ApplyInputProfileConfiguration(UISettings::values.profile_index);
+        // ApplyInputProfileConfiguration(UISettings::values.profile_index);
     }
 }
 
@@ -819,7 +818,7 @@ void Config::SavePlayerValues() {
 
         WriteSetting(QStringLiteral("player_%1_connected").arg(p), player.connected, false);
         WriteSetting(QStringLiteral("player_%1_type").arg(p), static_cast<u8>(player.type),
-                     static_cast<u8>(Settings::ControllerType::DualJoycon));
+                     static_cast<u8>(Settings::ControllerType::ProController));
 
         WriteSetting(QStringLiteral("player_%1_body_color_left").arg(p), player.body_color_left,
                      Settings::JOYCON_BODY_NEON_BLUE);

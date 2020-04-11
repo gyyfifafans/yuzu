@@ -9,6 +9,8 @@ add_library(input_common STATIC
     motion_emu.h
     sdl/sdl.cpp
     sdl/sdl.h
+    settings.cpp
+    settings.h
     udp/client.cpp
     udp/client.h
     udp/protocol.cpp

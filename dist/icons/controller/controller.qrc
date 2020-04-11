@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="controller">
+    <file alias="pro">pro.png</file>
+    <file alias="pro_dark">pro_dark.png</file>
+    <file alias="dual_joycons">dual_joycons.png</file>
+    <file alias="single_joycon_left">single_joycon_left.png</file>
+    <file alias="single_joycon_right">single_joycon_right.png</file>
+  </qresource>
+</RCC>

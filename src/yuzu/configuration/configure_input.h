@@ -10,11 +10,13 @@
 #include <QDialog>
 #include <QKeyEvent>
 
+#include "yuzu/configuration/configure_input_player.h"
+
 #include "ui_configure_input.h"
 
-class QPushButton;
 class QString;
 class QTimer;
+class QCheckBox;
 
 namespace Ui {
 class ConfigureInput;
@@ -22,7 +24,7 @@ class ConfigureInput;
 
 void OnDockedModeChanged(bool last_state, bool new_state);
 
-class ConfigureInput : public QDialog {
+class ConfigureInput : public QWidget {
     Q_OBJECT
 
 public:
@@ -35,9 +37,11 @@ public:
 private:
     void changeEvent(QEvent* event) override;
     void RetranslateUI();
-    void RetranslateControllerComboBoxes();
+    void ClearAll();
 
     void UpdateUIEnabled();
+
+    void UpdateDockedState(bool is_handheld);
 
     /// Load configuration settings.
     void LoadConfiguration();
@@ -48,6 +52,7 @@ private:
 
     std::unique_ptr<Ui::ConfigureInput> ui;
 
-    std::array<QComboBox*, 8> players_controller;
-    std::array<QPushButton*, 8> players_configure;
+    std::array<ConfigureInputPlayer*, 8> player_controller;
+    std::array<QWidget*, 8> player_tabs;
+    std::array<QCheckBox*, 8> player_connected;
 };

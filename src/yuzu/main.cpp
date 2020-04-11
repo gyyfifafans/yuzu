@@ -53,6 +53,7 @@ static FileSys::VirtualFile VfsDirectoryCreateFileWrapper(const FileSys::Virtual
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QProgressDialog>
+#include <QPushButton>
 #include <QShortcut>
 #include <QStatusBar>
 #include <QSysInfo>

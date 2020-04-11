@@ -37,7 +37,8 @@ static Controller_NPad::NPadControllerType MapSettingsTypeToNPad(Settings::Contr
     switch (type) {
     case Settings::ControllerType::ProController:
         return Controller_NPad::NPadControllerType::ProController;
-    case Settings::ControllerType::DualJoycon:
+    case Settings::ControllerType::DualJoyconDetached:
+    case Settings::ControllerType::HandheldJoyconAttached:
         return Controller_NPad::NPadControllerType::JoyDual;
     case Settings::ControllerType::LeftJoycon:
         return Controller_NPad::NPadControllerType::JoyLeft;

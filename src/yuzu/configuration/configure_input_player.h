@@ -16,7 +16,9 @@
 #include "core/settings.h"
 #include "ui_configure_input.h"
 
+class QCheckBox;
 class QKeyEvent;
+class QLabel;
 class QPushButton;
 class QString;
 class QTimer;
@@ -30,7 +32,7 @@ namespace Ui {
 class ConfigureInputPlayer;
 }
 
-class ConfigureInputPlayer : public QDialog {
+class ConfigureInputPlayer : public QWidget {
     Q_OBJECT
 
 public:
@@ -40,6 +42,22 @@ public:
     /// Save all button configurations to settings file
     void ApplyConfiguration();
 
+    /// Clear all input configuration
+    void ClearAll();
+
+    /// Restore all buttons to their default values.
+    void RestoreDefaults();
+
+    /// Set the connection state checkbox (used to sync state)
+    void ConnectPlayer(bool connected);
+
+signals:
+    /// Emitted when this controller is connected by the user
+    void Connected(bool connected);
+    /// Emitted when the first player controller selects Handheld mode (undocked with dual joycons
+    /// attached)
+    void HandheldStateChanged(bool is_handheld);
+
 private:
     void changeEvent(QEvent* event) override;
     void RetranslateUI();
@@ -48,10 +66,6 @@ private:
 
     /// Load configuration settings.
     void LoadConfiguration();
-    /// Restore all buttons to their default values.
-    void RestoreDefaults();
-    /// Clear all input configuration
-    void ClearAll();
 
     /// Update UI to reflect current configuration.
     void UpdateButtonLabels();
@@ -67,6 +81,15 @@ private:
     /// Handle key press events.
     void keyPressEvent(QKeyEvent* event) override;
 
+    /// Update the current controller icon
+    void UpdateControllerIcon();
+
+    /// Hides and disables controller settings based on the current controller type
+    void UpdateControllerAvailableButtons();
+
+    /// Gets the default controller mapping for this device and auto configures the input to match
+    void UpdateMappingWithDefaults();
+
     std::unique_ptr<Ui::ConfigureInputPlayer> ui;
 
     std::size_t player_index;
@@ -75,32 +98,32 @@ private:
     std::unique_ptr<QTimer> timeout_timer;
     std::unique_ptr<QTimer> poll_timer;
 
+    static constexpr int PLAYER_COUNT = 8;
+    std::array<QCheckBox*, PLAYER_COUNT> player_connected_checkbox;
+
     /// This will be the the setting function when an input is awaiting configuration.
     std::optional<std::function<void(const Common::ParamPackage&)>> input_setter;
 
     std::array<Common::ParamPackage, Settings::NativeButton::NumButtons> buttons_param;
     std::array<Common::ParamPackage, Settings::NativeAnalog::NumAnalogs> analogs_param;
 
-    static constexpr int ANALOG_SUB_BUTTONS_NUM = 5;
+    static constexpr int ANALOG_SUB_BUTTONS_NUM = 4;
+    // Adds room for two extra push buttons LStick Modifier and RStick Modifier
+    static constexpr int BUTTON_MAP_COUNT = Settings::NativeButton::NumButtons + 2;
 
     /// Each button input is represented by a QPushButton.
-    std::array<QPushButton*, Settings::NativeButton::NumButtons> button_map;
+    std::array<QPushButton*, BUTTON_MAP_COUNT> button_map;
 
-    std::vector<QWidget*> debug_hidden;
-    std::vector<QWidget*> layout_hidden;
-
-    /// A group of five QPushButtons represent one analog input. The buttons each represent up,
-    /// down, left, right, and modifier, respectively.
+    /// A group of four QPushButtons represent one analog input. The buttons each represent up,
+    /// down, left, right, respectively.
     std::array<std::array<QPushButton*, ANALOG_SUB_BUTTONS_NUM>, Settings::NativeAnalog::NumAnalogs>
         analog_map_buttons;
 
     /// Analog inputs are also represented each with a single button, used to configure with an
     /// actual analog stick
-    std::array<QPushButton*, Settings::NativeAnalog::NumAnalogs> analog_map_stick;
-    std::array<QSlider*, Settings::NativeAnalog::NumAnalogs>
-        analog_map_deadzone_and_modifier_slider;
-    std::array<QLabel*, Settings::NativeAnalog::NumAnalogs>
-        analog_map_deadzone_and_modifier_slider_label;
+    std::array<QPushButton*, Settings::NativeAnalsdlog::NumAnalogs> analog_map_modifier;
+    std::array<QSlider*, Settings::NativeAnalog::NumAnalogs> analog_map_deadzone;
+    std::array<QLabel*, Settings::NativeAnalog::NumAnalogs> analog_map_deadzone_label;
 
     static const std::array<std::string, ANALOG_SUB_BUTTONS_NUM> analog_sub_buttons;
 
@@ -112,4 +135,6 @@ private:
 
     std::array<QPushButton*, 4> controller_color_buttons;
     std::array<QColor, 4> controller_colors;
+
+    std::vector<Common::ParamPackage> input_devices;
 };

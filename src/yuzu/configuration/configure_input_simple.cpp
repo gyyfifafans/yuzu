@@ -13,17 +13,6 @@
 
 namespace {
 
-template <typename Dialog, typename... Args>
-void CallConfigureDialog(ConfigureInputSimple* caller, Args&&... args) {
-    caller->ApplyConfiguration();
-    Dialog dialog(caller, std::forward<Args>(args)...);
-
-    const auto res = dialog.exec();
-    if (res == QDialog::Accepted) {
-        dialog.ApplyConfiguration();
-    }
-}
-
 // OnProfileSelect functions should (when applicable):
 // - Set controller types
 // - Set controller enabled
