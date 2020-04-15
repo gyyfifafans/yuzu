@@ -34,6 +34,8 @@ public:
     /// Save all button configurations to settings file
     void ApplyConfiguration();
 
+    QList<QWidget*> GetSubTabs() const;
+
 private:
     void changeEvent(QEvent* event) override;
     void RetranslateUI();

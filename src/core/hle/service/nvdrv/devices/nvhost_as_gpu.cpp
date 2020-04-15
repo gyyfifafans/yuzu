@@ -118,6 +118,7 @@ u32 nvhost_as_gpu::Remap(const std::vector<u8>& input, std::vector<u8>& output) 
 
 u32 nvhost_as_gpu::MapBufferEx(const std::vector<u8>& input, std::vector<u8>& output) {
     IoctlMapBufferEx params{};
+    ASSERT_MSG(input.size() == sizeof(IoctlMapBufferEx), "Invalid MapBuffer size");
     std::memcpy(&params, input.data(), input.size());
 
     LOG_DEBUG(Service_NVDRV,

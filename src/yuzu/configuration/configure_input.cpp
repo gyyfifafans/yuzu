@@ -66,10 +66,14 @@ ConfigureInput::ConfigureInput(QWidget* parent)
     ui->setupUi(this);
 
     player_controller = {
-        new ConfigureInputPlayer(this, 0), new ConfigureInputPlayer(this, 1),
-        new ConfigureInputPlayer(this, 2), new ConfigureInputPlayer(this, 3),
-        new ConfigureInputPlayer(this, 4), new ConfigureInputPlayer(this, 5),
-        new ConfigureInputPlayer(this, 6), new ConfigureInputPlayer(this, 7),
+        new ConfigureInputPlayer(this, 0, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 1, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 2, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 3, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 4, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 5, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 6, ui->consoleInputSettings),
+        new ConfigureInputPlayer(this, 7, ui->consoleInputSettings),
     };
 
     player_tabs = {
@@ -138,6 +142,13 @@ ConfigureInput::ConfigureInput(QWidget* parent)
 }
 
 ConfigureInput::~ConfigureInput() = default;
+
+QList<QWidget*> ConfigureInput::GetSubTabs() const {
+    return {
+        ui->tabPlayer1, ui->tabPlayer2, ui->tabPlayer3, ui->tabPlayer4,  ui->tabPlayer5,
+        ui->tabPlayer6, ui->tabPlayer7, ui->tabPlayer8, ui->tabAdvanced,
+    };
+}
 
 void ConfigureInput::ApplyConfiguration() {
     for (auto controller : player_controller) {
@@ -218,14 +229,16 @@ void ConfigureInput::LoadConfiguration() {
 }
 
 void ConfigureInput::LoadPlayerControllerIndices() {
-    // for (std::size_t i = 0; i < players_controller.size(); ++i) {
-    //    const auto connected = Settings::values.players[i].connected;
-    //    players_controller[i]->setCurrentIndex(
-    //        connected ? static_cast<u8>(Settings::values.players[i].type) + 1 : 0);
-    //}
+    for (std::size_t i = 0; i < player_connected.size(); ++i) {
+        const auto connected = Settings::values.players[i].connected;
+        player_connected[i]->setChecked(connected);
+    }
 }
+
 void ConfigureInput::ClearAll() {
-    auto player_tab = player_controller[ui->tabWidget->currentIndex()];
+    // We don't have a good way to know what tab is active, but we can find out by getting the
+    // parent of the consoleInputSettings
+    auto player_tab = static_cast<ConfigureInputPlayer*>(ui->consoleInputSettings->parent());
     player_tab->ClearAll();
 }
 
@@ -243,7 +256,9 @@ void ConfigureInput::RestoreDefaults() {
     // ui->debug_enabled->setCheckState(Qt::Unchecked);
     // ui->touchscreen_enabled->setCheckState(Qt::Checked);
 
-    auto player_tab = player_controller[ui->tabWidget->currentIndex()];
+    // We don't have a good way to know what tab is active, but we can find out by getting the
+    // parent of the consoleInputSettings
+    auto player_tab = static_cast<ConfigureInputPlayer*>(ui->consoleInputSettings->parent());
     player_tab->RestoreDefaults();
 
     ui->radioDocked->setChecked(true);

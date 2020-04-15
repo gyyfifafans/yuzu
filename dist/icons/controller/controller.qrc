@@ -1,9 +1,14 @@
 <RCC>
   <qresource prefix="controller">
-    <file alias="pro">pro.png</file>
-    <file alias="pro_dark">pro_dark.png</file>
-    <file alias="dual_joycons">dual_joycons.png</file>
+    <file alias="dual_joycon">dual_joycon.png</file>
+    <file alias="dual_joycon_dark">dual_joycon_dark.png</file>
+    <file alias="handheld">handheld.png</file>
+    <file alias="handheld_dark">handheld_dark.png</file>
+    <file alias="pro_controller">pro_controller.png</file>
+    <file alias="pro_controller_dark">pro_controller_dark.png</file>
     <file alias="single_joycon_left">single_joycon_left.png</file>
+    <file alias="single_joycon_left_dark">single_joycon_left_dark.png</file>
     <file alias="single_joycon_right">single_joycon_right.png</file>
+    <file alias="single_joycon_right_dark">single_joycon_right_dark.png</file>
   </qresource>
 </RCC>

@@ -7,6 +7,7 @@
 #include <utility>
 #include <QColorDialog>
 #include <QGridLayout>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMessageBox>
@@ -17,6 +18,7 @@
 #include "ui_configure_input_player.h"
 #include "yuzu/configuration/config.h"
 #include "yuzu/configuration/configure_input_player.h"
+#include "yuzu/uisettings.h"
 
 const std::array<std::string, ConfigureInputPlayer::ANALOG_SUB_BUTTONS_NUM>
     ConfigureInputPlayer::analog_sub_buttons{{
@@ -93,9 +95,9 @@ void SetAnalogParam(const Common::ParamPackage& input_param, Common::ParamPackag
         analog_param = input_param;
         return;
     }
-    // The poller returned a button so clear out the old input if it has axis and build it again
-    // with analog_from_button
-    if (analog_param.Has("axis_x") || analog_param.Has("axis_y")) {
+    // Check if the current configuration has either no engine or an axis binding.
+    // Clears out the old binding and adds one with analog_from_button.
+    if (!analog_param.Has("engine") || analog_param.Has("axis_x") || analog_param.Has("axis_y")) {
         analog_param = {
             {"engine", "analog_from_button"},
         };
@@ -172,11 +174,13 @@ QString AnalogToText(const Common::ParamPackage& param, const std::string& dir) 
 }
 } // namespace
 
-ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_index, bool debug)
+ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_index,
+                                           QWidget* bottom_row, bool debug)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureInputPlayer>()), player_index(player_index),
       debug(debug), timeout_timer(std::make_unique<QTimer>()),
-      poll_timer(std::make_unique<QTimer>()) {
+      poll_timer(std::make_unique<QTimer>()), bottom_row(bottom_row) {
     ui->setupUi(this);
+
     setFocusPolicy(Qt::ClickFocus);
 
     button_map = {
@@ -207,47 +211,54 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
     analog_map_deadzone = {ui->sliderLStickDeadzone, ui->sliderRStickDeadzone};
     analog_map_deadzone_label = {ui->labelLStickDeadzone, ui->labelRStickDeadzone};
 
-    for (int button_id = 0; button_id < Settings::NativeButton::NumButtons; button_id++) {
-        auto* const button = button_map[button_id];
-        if (button == nullptr) {
-            continue;
-        }
-
+    const auto ConfigureButtonClick = [&](QPushButton* button, Common::ParamPackage* param,
+                                          int default_val) {
         button->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(button, &QPushButton::clicked, [=] {
-            HandleClick(button_map[button_id],
+            HandleClick(button,
                         [=](Common::ParamPackage params) {
-                            // Workaround for ZL & ZR for analog triggers like on XBOX controllors.
-                            // Analog triggers (from controllers like the XBOX controller) would not
-                            // work due to a different range of their signals (from 0 to 255 on
-                            // analog triggers instead of -32768 to 32768 on analog joysticks). The
-                            // SDL driver misinterprets analog triggers as analog joysticks.
+                            // Workaround for ZL & ZR for analog triggers like on XBOX
+                            // controllers. Analog triggers (from controllers like the XBOX
+                            // controller) would not work due to a different range of their
+                            // signals (from 0 to 255 on analog triggers instead of -32768 to
+                            // 32768 on analog joysticks). The SDL driver misinterprets analog
+                            // triggers as analog joysticks.
                             // TODO: reinterpret the signal range for analog triggers to map the
-                            // values correctly. This is required for the correct emulation of the
-                            // analog triggers of the GameCube controller.
-                            if (button_id == Settings::NativeButton::ZL ||
-                                button_id == Settings::NativeButton::ZR) {
+                            // values correctly. This is required for the correct emulation of
+                            // the analog triggers of the GameCube controller.
+                            if (params.Get("engine", "") == "analog_from_button") {
                                 params.Set("direction", "+");
                                 params.Set("threshold", "0.5");
                             }
-                            buttons_param[button_id] = std::move(params);
+                            (*param) = std::move(params);
                         },
                         InputCommon::Polling::DeviceType::Button);
         });
         connect(button, &QPushButton::customContextMenuRequested, [=](const QPoint& menu_location) {
             QMenu context_menu;
             context_menu.addAction(tr("Clear"), [&] {
-                buttons_param[button_id].Clear();
-                button_map[button_id]->setText(tr("[not set]"));
+                param->Clear();
+                button->setText(tr("[not set]"));
             });
             context_menu.addAction(tr("Restore Default"), [&] {
-                buttons_param[button_id] = Common::ParamPackage{
-                    InputCommon::GenerateKeyboardParam(Config::default_buttons[button_id])};
-                button_map[button_id]->setText(ButtonToText(buttons_param[button_id]));
+                (*param) = Common::ParamPackage{InputCommon::GenerateKeyboardParam(default_val)};
+                button->setText(ButtonToText(*param));
             });
-            context_menu.exec(button_map[button_id]->mapToGlobal(menu_location));
+            context_menu.exec(button->mapToGlobal(menu_location));
         });
+    };
+
+    for (int button_id = 0; button_id < Settings::NativeButton::NumButtons; button_id++) {
+        auto* const button = button_map[button_id];
+        if (button == nullptr) {
+            continue;
+        }
+        ConfigureButtonClick(button_map[button_id], &buttons_param[button_id],
+                             Config::default_buttons[button_id]);
     }
+    // Handle clicks for the modifier buttons as well
+    ConfigureButtonClick(ui->buttonLStickMod, &lstick_mod, Config::default_lstick_mod);
+    ConfigureButtonClick(ui->buttonRStickMod, &rstick_mod, Config::default_rstick_mod);
 
     for (int analog_id = 0; analog_id < Settings::NativeAnalog::NumAnalogs; analog_id++) {
         for (int sub_button_id = 0; sub_button_id < ANALOG_SUB_BUTTONS_NUM; sub_button_id++) {
@@ -370,8 +381,21 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
                 [this, i] { OnControllerButtonClick(static_cast<int>(i)); });
     }
 
+    // Controller profile
+    ui->buttonDeleteProfile->setEnabled(ui->comboProfiles->count() > 1);
+    for (const auto& profile : UISettings::values.input_profiles) {
+        ui->comboProfiles->addItem(QString::fromStdString(profile.name));
+    }
+
+    ui->comboProfiles->setCurrentIndex(Settings::values.players[player_index].profile_index);
+
+    connect(ui->buttonNewProfile, &QPushButton::clicked, this, &ConfigureInputPlayer::NewProfile);
+    connect(ui->buttonDeleteProfile, &QPushButton::clicked, this,
+            &ConfigureInputPlayer::DeleteProfile);
+    connect(ui->buttonRenameProfile, &QPushButton::clicked, this,
+            &ConfigureInputPlayer::RenameProfile);
+
     LoadConfiguration();
-    resize(0, 0);
 
     // TODO(wwylele): enable this when we actually emulate it
     ui->buttonHome->setEnabled(false);
@@ -402,6 +426,7 @@ void ConfigureInputPlayer::ApplyConfiguration() {
     player.button_color_right = colors[3];
     player.type = static_cast<Settings::ControllerType>(
         std::max(ui->comboControllerType->currentIndex() - 1, 0));
+    player.connected = ui->groupConnectedController->isChecked();
 }
 
 void ConfigureInputPlayer::changeEvent(QEvent* event) {
@@ -463,6 +488,7 @@ void ConfigureInputPlayer::LoadConfiguration() {
             QStringLiteral("background-color: %1; min-width: 55px;")
                 .arg(controller_colors[i].name()));
     }
+    ui->groupConnectedController->setChecked(player.connected);
 }
 
 void ConfigureInputPlayer::RestoreDefaults() {
@@ -528,32 +554,18 @@ void ConfigureInputPlayer::UpdateButtonLabels() {
         }
 
         auto& param = analogs_param[analog_id];
-        auto* const analog_stick_slider = analog_map_deadzone_and_modifier_slider[analog_id];
-        auto* const analog_stick_slider_label =
-            analog_map_deadzone_and_modifier_slider_label[analog_id];
-
-        if (param.Has("engine")) {
-            if (param.Get("engine", "") == "sdl") {
-                if (!param.Has("deadzone")) {
-                    param.Set("deadzone", 0.1f);
-                }
-
-                analog_stick_slider->setValue(static_cast<int>(param.Get("deadzone", 0.1f) * 100));
-                if (analog_stick_slider->value() == 0) {
-                    analog_stick_slider_label->setText(tr("Deadzone: 0%"));
-                }
-            } else {
-                if (!param.Has("modifier_scale")) {
-                    param.Set("modifier_scale", 0.5f);
-                }
-
-                analog_stick_slider->setValue(
-                    static_cast<int>(param.Get("modifier_scale", 0.5f) * 100));
-                if (analog_stick_slider->value() == 0) {
-                    analog_stick_slider_label->setText(tr("Modifier Scale: 0%"));
-                }
+        auto* const analog_deadzone_slider = analog_map_deadzone[analog_id];
+        auto* const analog_deadzone_label = analog_map_deadzone_label[analog_id];
+        const bool is_controller = param.Has("engine") && param.Get("engine", "") == "sdl";
+        if (is_controller) {
+            if (!param.Has("deadzone")) {
+                param.Set("deadzone", 0.1f);
             }
+
+            analog_deadzone_slider->setValue(static_cast<int>(param.Get("deadzone", 0.1f) * 100));
         }
+        analog_deadzone_slider->setVisible(is_controller);
+        analog_deadzone_label->setVisible(is_controller);
     }
 }
 
@@ -632,35 +644,36 @@ void ConfigureInputPlayer::keyPressEvent(QKeyEvent* event) {
 }
 
 void ConfigureInputPlayer::UpdateControllerIcon() {
+    // We aren't using Qt's built in theme support here since we aren't drawing an icon (and its
+    // "nonstandard" to use an image through the icon support)
     QString stylesheet{};
     switch (GetControllerTypeFromIndex(ui->comboControllerType->currentIndex())) {
-    case Settings::ControllerType::ProController: {
-        if (QIcon::themeName().contains(QStringLiteral("dark"))) {
-            stylesheet = QStringLiteral("image: url(:/controller/pro_dark)");
-        } else {
-            stylesheet = QStringLiteral("image: url(:/controller/pro)");
-        }
+    case Settings::ControllerType::ProController:
+        stylesheet = QStringLiteral("image: url(:/controller/pro_controller%0)");
         break;
-    }
     case Settings::ControllerType::DualJoyconDetached:
+        stylesheet = QStringLiteral("image: url(:/controller/dual_joycon%0)");
+        break;
     case Settings::ControllerType::HandheldJoyconAttached:
-        stylesheet = QStringLiteral("image: url(:/controller/dual_joycons)");
+        stylesheet = QStringLiteral("image: url(:/controller/handheld%0)");
         break;
     case Settings::ControllerType::LeftJoycon:
-        stylesheet = QStringLiteral("image: url(:/controller/single_joycon_left)");
+        stylesheet = QStringLiteral("image: url(:/controller/single_joycon_left%0)");
         break;
     case Settings::ControllerType::RightJoycon:
-        stylesheet = QStringLiteral("image: url(:/controller/single_joycon_right)");
+        stylesheet = QStringLiteral("image: url(:/controller/single_joycon_right%0)");
         break;
     default:
         break;
     }
-    ui->controllerFrame->setStyleSheet(stylesheet);
+    const QString theme = QIcon::themeName().contains(QStringLiteral("dark"))
+                              ? QStringLiteral("_dark")
+                              : QStringLiteral("");
+    ui->controllerFrame->setStyleSheet(stylesheet.arg(theme));
 }
 
 void ConfigureInputPlayer::UpdateControllerAvailableButtons() {
-    auto layout =
-        static_cast<Settings::ControllerType>(ui->comboControllerType->currentIndex() - 1);
+    auto layout = GetControllerTypeFromIndex(ui->comboControllerType->currentIndex());
     if (debug)
         layout = Settings::ControllerType::DualJoyconDetached;
 
@@ -739,6 +752,69 @@ void ConfigureInputPlayer::UpdateControllerAvailableButtons() {
     }
 }
 
+void ConfigureInputPlayer::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    ui->main->addWidget(bottom_row);
+}
+
 void ConfigureInputPlayer::ConnectPlayer(bool connected) {
     ui->groupConnectedController->setChecked(connected);
+}
+
+void ConfigureInputPlayer::NewProfile() {
+    const QString name =
+        QInputDialog::getText(this, tr("New Profile"), tr("Enter the name for the new profile."));
+    if (name.isEmpty()) {
+        return;
+    }
+    if (IsProfileNameDuplicate(name)) {
+        WarnProposedProfileNameIsDuplicate();
+        return;
+    }
+
+    ApplyConfiguration();
+    // UISettings::values.input_profiles[ui->comboProfiles->currentIndex()] = ;
+    // UISettings::CreateProfile(name.toStdString());
+    ui->comboProfiles->addItem(name);
+    // ui->comboProfiles->setCurrentIndex(UISettings::values.current_input_profile_index);
+    LoadConfiguration();
+    ui->buttonDeleteProfile->setEnabled(ui->comboProfiles->count() > 1);
+}
+
+void ConfigureInputPlayer::DeleteProfile() {
+    const auto answer = QMessageBox::question(
+        this, tr("Delete Profile"), tr("Delete profile %1?").arg(ui->comboProfiles->currentText()));
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+    const int index = ui->comboProfiles->currentIndex();
+    ui->comboProfiles->removeItem(index);
+    ui->comboProfiles->setCurrentIndex(0);
+    // UISettings::DeleteProfile(index);
+    LoadConfiguration();
+    ui->buttonDeleteProfile->setEnabled(ui->comboProfiles->count() > 1);
+}
+
+void ConfigureInputPlayer::RenameProfile() {
+    const QString new_name = QInputDialog::getText(this, tr("Rename Profile"), tr("New name:"));
+    if (new_name.isEmpty()) {
+        return;
+    }
+    if (IsProfileNameDuplicate(new_name)) {
+        WarnProposedProfileNameIsDuplicate();
+        return;
+    }
+
+    ui->comboProfiles->setItemText(ui->comboProfiles->currentIndex(), new_name);
+    // UISettings::RenameCurrentProfile(new_name.toStdString());
+    // UISettings::SaveProfile(ui->comboProfiles->currentIndex());
+}
+
+bool ConfigureInputPlayer::IsProfileNameDuplicate(const QString& name) const {
+    return ui->comboProfiles->findText(name, Qt::MatchFixedString | Qt::MatchCaseSensitive) != -1;
+}
+
+void ConfigureInputPlayer::WarnProposedProfileNameIsDuplicate() {
+    QMessageBox::warning(this, tr("Duplicate profile name"),
+                         tr("Profile name already exists. Please choose a different name."));
 }

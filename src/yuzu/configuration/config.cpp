@@ -32,22 +32,23 @@ const std::array<int, Settings::NativeButton::NumButtons> Config::default_button
     Qt::Key_H, Qt::Key_G, Qt::Key_D, Qt::Key_C, Qt::Key_B, Qt::Key_V,
 };
 
-const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> Config::default_analogs{{
+const std::array<std::array<int, 4>, Settings::NativeAnalog::NumAnalogs> Config::default_analogs{{
     {
         Qt::Key_Up,
         Qt::Key_Down,
         Qt::Key_Left,
         Qt::Key_Right,
-        Qt::Key_E,
     },
     {
         Qt::Key_I,
         Qt::Key_K,
         Qt::Key_J,
         Qt::Key_L,
-        Qt::Key_R,
     },
 }};
+
+const int Config::default_lstick_mod = Qt::Key_E;
+const int Config::default_rstick_mod = Qt::Key_R;
 
 const std::array<int, Settings::NativeMouseButton::NumMouseButtons> Config::default_mouse_buttons =
     {
@@ -241,6 +242,8 @@ void Config::ReadPlayerValues() {
                 ->value(QStringLiteral("player_%1_type").arg(p),
                         static_cast<u8>(Settings::ControllerType::ProController))
                 .toUInt());
+        player.profile_index =
+            qt_config->value(QStringLiteral("player_%1_profile_index").arg(p), 0).toUInt();
 
         player.body_color_left = qt_config
                                      ->value(QStringLiteral("player_%1_body_color_left").arg(p),
@@ -390,13 +393,6 @@ void Config::ReadTouchscreenValues() {
         ReadSetting(QStringLiteral("touchscreen_diameter_y"), 15).toUInt();
 }
 
-void Config::ApplyDefaultProfileIfInputInvalid() {
-    if (!std::any_of(Settings::values.players.begin(), Settings::values.players.end(),
-                     [](const Settings::PlayerInput& in) { return in.connected; })) {
-        // ApplyInputProfileConfiguration(UISettings::values.profile_index);
-    }
-}
-
 void Config::ReadAudioValues() {
     qt_config->beginGroup(QStringLiteral("Audio"));
 
@@ -422,6 +418,7 @@ void Config::ReadControlValues() {
     ReadKeyboardValues();
     ReadMouseValues();
     ReadTouchscreenValues();
+    ReadControllerProfiles();
 
     Settings::values.motion_device =
         ReadSetting(QStringLiteral("motion_device"),
@@ -438,6 +435,74 @@ void Config::ReadControlValues() {
             .toInt());
     Settings::values.udp_pad_index =
         static_cast<u8>(ReadSetting(QStringLiteral("udp_pad_index"), 0).toUInt());
+
+    qt_config->endGroup();
+}
+
+void Config::ReadControllerProfiles() {
+    qt_config->beginGroup(QStringLiteral("ControllerProfiles"));
+
+    const auto append_profile = [this] {
+        UISettings::InputProfile profile;
+        profile.name =
+            ReadSetting(QStringLiteral("name"), QStringLiteral("Default")).toString().toStdString();
+        for (int i = 0; i < Settings::NativeButton::NumButtons; ++i) {
+            std::string default_param = InputCommon::GenerateKeyboardParam(default_buttons[i]);
+            profile.buttons[i] = ReadSetting(QString::fromUtf8(Settings::NativeButton::mapping[i]),
+                                             QString::fromStdString(default_param))
+                                     .toString()
+                                     .toStdString();
+            if (profile.buttons[i].empty())
+                profile.buttons[i] = default_param;
+        }
+        for (int i = 0; i < Settings::NativeAnalog::NumAnalogs; ++i) {
+            std::string default_param = InputCommon::GenerateAnalogParamFromKeys(
+                default_analogs[i][0], default_analogs[i][1], default_analogs[i][2],
+                default_analogs[i][3], default_analogs[i][4], 0.5f);
+            profile.analogs[i] = ReadSetting(QString::fromUtf8(Settings::NativeAnalog::mapping[i]),
+                                             QString::fromStdString(default_param))
+                                     .toString()
+                                     .toStdString();
+            if (profile.analogs[i].empty())
+                profile.analogs[i] = default_param;
+        }
+        profile.motion_device =
+            ReadSetting(QStringLiteral("motion_device"),
+                        QStringLiteral(
+                            "engine:motion_emu,update_period:100,sensitivity:0.01,tilt_clamp:90.0"))
+                .toString()
+                .toStdString();
+        profile.touch_device =
+            ReadSetting(QStringLiteral("touch_device"), QStringLiteral("engine:emu_window"))
+                .toString()
+                .toStdString();
+        profile.udp_input_address =
+            ReadSetting(QStringLiteral("udp_input_address"),
+                        QString::fromUtf8(InputCommon::CemuhookUDP::DEFAULT_ADDR))
+                .toString()
+                .toStdString();
+        profile.udp_input_port = static_cast<u16>(
+            ReadSetting(QStringLiteral("udp_input_port"), InputCommon::CemuhookUDP::DEFAULT_PORT)
+                .toInt());
+        profile.udp_pad_index =
+            static_cast<u8>(ReadSetting(QStringLiteral("udp_pad_index"), 0).toUInt());
+        UISettings::values.input_profiles.emplace_back(std::move(profile));
+    };
+
+    int num_input_profiles = qt_config->beginReadArray(QStringLiteral("profiles"));
+
+    for (int i = 0; i < num_input_profiles; ++i) {
+        qt_config->setArrayIndex(i);
+        append_profile();
+    }
+
+    qt_config->endArray();
+
+    // create a input profile if no input profiles exist, with the default or old settings
+    if (num_input_profiles == 0) {
+        append_profile();
+        num_input_profiles = 1;
+    }
 
     qt_config->endGroup();
 }
@@ -739,13 +804,10 @@ void Config::ReadUIValues() {
     UISettings::values.first_start = ReadSetting(QStringLiteral("firstStart"), true).toBool();
     UISettings::values.callout_flags = ReadSetting(QStringLiteral("calloutFlags"), 0).toUInt();
     UISettings::values.show_console = ReadSetting(QStringLiteral("showConsole"), false).toBool();
-    UISettings::values.profile_index = ReadSetting(QStringLiteral("profileIndex"), 0).toUInt();
     UISettings::values.pause_when_in_background =
         ReadSetting(QStringLiteral("pauseWhenInBackground"), false).toBool();
     UISettings::values.hide_mouse =
         ReadSetting(QStringLiteral("hideInactiveMouse"), false).toBool();
-
-    ApplyDefaultProfileIfInputInvalid();
 
     qt_config->endGroup();
 }
@@ -819,6 +881,7 @@ void Config::SavePlayerValues() {
         WriteSetting(QStringLiteral("player_%1_connected").arg(p), player.connected, false);
         WriteSetting(QStringLiteral("player_%1_type").arg(p), static_cast<u8>(player.type),
                      static_cast<u8>(Settings::ControllerType::ProController));
+        WriteSetting(QStringLiteral("player_%1_profile_index").arg(p), player.profile_index, 0);
 
         WriteSetting(QStringLiteral("player_%1_body_color_left").arg(p), player.body_color_left,
                      Settings::JOYCON_BODY_NEON_BLUE);
@@ -897,6 +960,7 @@ void Config::SaveTouchscreenValues() {
 
 void Config::SaveValues() {
     SaveControlValues();
+    SaveControllerProfiles();
     SaveCoreValues();
     SaveRendererValues();
     SaveAudioValues();
@@ -942,6 +1006,46 @@ void Config::SaveControlValues() {
     WriteSetting(QStringLiteral("udp_input_port"), Settings::values.udp_input_port,
                  InputCommon::CemuhookUDP::DEFAULT_PORT);
     WriteSetting(QStringLiteral("udp_pad_index"), Settings::values.udp_pad_index, 0);
+
+    qt_config->endGroup();
+}
+
+void Config::SaveControllerProfiles() {
+    qt_config->beginGroup(QStringLiteral("ControllerProfiles"));
+
+    qt_config->beginWriteArray(QStringLiteral("profiles"));
+    for (std::size_t p = 0; p < UISettings::values.input_profiles.size(); ++p) {
+        qt_config->setArrayIndex(static_cast<int>(p));
+        const auto& profile = UISettings::values.input_profiles[p];
+        WriteSetting(QStringLiteral("name"), QString::fromStdString(profile.name),
+                     QStringLiteral("default"));
+        for (int i = 0; i < Settings::NativeButton::NumButtons; ++i) {
+            std::string default_param = InputCommon::GenerateKeyboardParam(default_buttons[i]);
+            WriteSetting(QString::fromStdString(Settings::NativeButton::mapping[i]),
+                         QString::fromStdString(profile.buttons[i]),
+                         QString::fromStdString(default_param));
+        }
+        for (int i = 0; i < Settings::NativeAnalog::NumAnalogs; ++i) {
+            std::string default_param = InputCommon::GenerateAnalogParamFromKeys(
+                default_analogs[i][0], default_analogs[i][1], default_analogs[i][2],
+                default_analogs[i][3], default_analogs[i][4], 0.5f);
+            WriteSetting(QString::fromStdString(Settings::NativeAnalog::mapping[i]),
+                         QString::fromStdString(profile.analogs[i]),
+                         QString::fromStdString(default_param));
+        }
+        WriteSetting(
+            QStringLiteral("motion_device"), QString::fromStdString(profile.motion_device),
+            QStringLiteral("engine:motion_emu,update_period:100,sensitivity:0.01,tilt_clamp:90.0"));
+        WriteSetting(QStringLiteral("touch_device"), QString::fromStdString(profile.touch_device),
+                     QStringLiteral("engine:emu_window"));
+        WriteSetting(QStringLiteral("udp_input_address"),
+                     QString::fromStdString(profile.udp_input_address),
+                     QString::fromUtf8(InputCommon::CemuhookUDP::DEFAULT_ADDR));
+        WriteSetting(QStringLiteral("udp_input_port"), profile.udp_input_port,
+                     InputCommon::CemuhookUDP::DEFAULT_PORT);
+        WriteSetting(QStringLiteral("udp_pad_index"), profile.udp_pad_index, 0);
+    }
+    qt_config->endArray();
 
     qt_config->endGroup();
 }
@@ -1167,7 +1271,6 @@ void Config::SaveUIValues() {
     WriteSetting(QStringLiteral("firstStart"), UISettings::values.first_start, true);
     WriteSetting(QStringLiteral("calloutFlags"), UISettings::values.callout_flags, 0);
     WriteSetting(QStringLiteral("showConsole"), UISettings::values.show_console, false);
-    WriteSetting(QStringLiteral("profileIndex"), UISettings::values.profile_index, 0);
     WriteSetting(QStringLiteral("pauseWhenInBackground"),
                  UISettings::values.pause_when_in_background, false);
     WriteSetting(QStringLiteral("hideInactiveMouse"), UISettings::values.hide_mouse, false);

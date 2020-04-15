@@ -75,11 +75,11 @@ Q_DECLARE_METATYPE(QList<QWidget*>);
 
 void ConfigureDialog::PopulateSelectionList() {
     const std::array<std::pair<QString, QList<QWidget*>>, 5> items{
-        {{tr("General"), {ui->generalTab, ui->webTab, ui->debugTab, ui->uiTab}},
+        {{tr("General"), {ui->generalTab, ui->hotkeysTab, ui->uiTab, ui->webTab, ui->debugTab}},
          {tr("System"), {ui->systemTab, ui->profileManagerTab, ui->serviceTab, ui->filesystemTab}},
          {tr("Graphics"), {ui->graphicsTab, ui->graphicsAdvancedTab}},
          {tr("Audio"), {ui->audioTab}},
-         {tr("Controls"), {ui->inputTab, ui->hotkeysTab}}},
+         {tr("Controls"), ui->inputTab->GetSubTabs()}},
     };
 
     [[maybe_unused]] const QSignalBlocker blocker(ui->selectorList);
@@ -99,22 +99,6 @@ void ConfigureDialog::UpdateVisibleTabs() {
         return;
     }
 
-    const std::map<QWidget*, QString> widgets = {
-        {ui->generalTab, tr("General")},
-        {ui->systemTab, tr("System")},
-        {ui->profileManagerTab, tr("Profiles")},
-        {ui->inputTab, tr("Input")},
-        {ui->hotkeysTab, tr("Hotkeys")},
-        {ui->graphicsTab, tr("Graphics")},
-        {ui->graphicsAdvancedTab, tr("Advanced")},
-        {ui->audioTab, tr("Audio")},
-        {ui->debugTab, tr("Debug")},
-        {ui->webTab, tr("Web")},
-        {ui->uiTab, tr("UI")},
-        {ui->filesystemTab, tr("Filesystem")},
-        {ui->serviceTab, tr("Services")},
-    };
-
     [[maybe_unused]] const QSignalBlocker blocker(ui->tabWidget);
 
     ui->tabWidget->clear();
@@ -122,6 +106,6 @@ void ConfigureDialog::UpdateVisibleTabs() {
     const QList<QWidget*> tabs = qvariant_cast<QList<QWidget*>>(items[0]->data(Qt::UserRole));
 
     for (const auto tab : tabs) {
-        ui->tabWidget->addTab(tab, widgets.at(tab));
+        ui->tabWidget->addTab(tab, tab->accessibleName());
     }
 }

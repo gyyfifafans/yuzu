@@ -162,4 +162,5 @@ bool IsGPULevelHigh();
 
 void Apply();
 void LogSettings();
+
 } // namespace Settings

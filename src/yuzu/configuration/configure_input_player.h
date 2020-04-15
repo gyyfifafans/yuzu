@@ -15,6 +15,7 @@
 #include "common/param_package.h"
 #include "core/settings.h"
 #include "ui_configure_input.h"
+#include "yuzu/uisettings.h"
 
 class QCheckBox;
 class QKeyEvent;
@@ -36,7 +37,8 @@ class ConfigureInputPlayer : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ConfigureInputPlayer(QWidget* parent, std::size_t player_index, bool debug = false);
+    explicit ConfigureInputPlayer(QWidget* parent, std::size_t player_index, QWidget* bottom_row,
+                                  bool debug = false);
     ~ConfigureInputPlayer() override;
 
     /// Save all button configurations to settings file
@@ -57,6 +59,9 @@ signals:
     /// Emitted when the first player controller selects Handheld mode (undocked with dual joycons
     /// attached)
     void HandheldStateChanged(bool is_handheld);
+
+protected:
+    void showEvent(QShowEvent* event) override;
 
 private:
     void changeEvent(QEvent* event) override;
@@ -90,6 +95,12 @@ private:
     /// Gets the default controller mapping for this device and auto configures the input to match
     void UpdateMappingWithDefaults();
 
+    void NewProfile();
+    void DeleteProfile();
+    void RenameProfile();
+    bool IsProfileNameDuplicate(const QString& name) const;
+    void WarnProposedProfileNameIsDuplicate();
+
     std::unique_ptr<Ui::ConfigureInputPlayer> ui;
 
     std::size_t player_index;
@@ -113,6 +124,9 @@ private:
 
     /// Each button input is represented by a QPushButton.
     std::array<QPushButton*, BUTTON_MAP_COUNT> button_map;
+    /// Extra buttons for the modifiers
+    Common::ParamPackage lstick_mod;
+    Common::ParamPackage rstick_mod;
 
     /// A group of four QPushButtons represent one analog input. The buttons each represent up,
     /// down, left, right, respectively.
@@ -136,5 +150,16 @@ private:
     std::array<QPushButton*, 4> controller_color_buttons;
     std::array<QColor, 4> controller_colors;
 
+    /// Stores the current button configuration as a temporary profile. If the user saves the
+    /// controller settings, then this is saved to settings.
+    UISettings::InputProfile profile_edits;
+
+    /// List of physical devices users can map with. If a SDL backed device is selected, then you
+    /// can usue this device to get a default mapping
     std::vector<Common::ParamPackage> input_devices;
+
+    /// Bottom row is where console wide settings are held, and its "owned" by the parent
+    /// ConfigureInput widget. On show, add this widget to the main layout. This will change the
+    /// parent of the widget to this widget (but thats fine)
+    QWidget* bottom_row;
 };

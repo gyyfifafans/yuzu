@@ -313,6 +313,9 @@ struct PlayerInput {
     ControllerType type;
     ButtonsRaw buttons;
     AnalogsRaw analogs;
+    std::string lstick_mod;
+    std::string rstick_mod;
+    u32 profile_index;
 
     u32 body_color_right;
     u32 button_color_right;

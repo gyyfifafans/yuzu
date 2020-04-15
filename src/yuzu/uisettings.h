@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QVector>
 #include "common/common_types.h"
+#include "core/settings.h"
 
 namespace UISettings {
 
@@ -37,6 +38,19 @@ struct GameDir {
     bool operator!=(const GameDir& rhs) const {
         return !operator==(rhs);
     };
+};
+
+struct InputProfile {
+    std::string name;
+    Settings::ButtonsRaw buttons;
+    Settings::AnalogsRaw analogs;
+    std::string lstick_mod;
+    std::string rstick_mod;
+    std::string motion_device;
+    std::string touch_device;
+    std::string udp_input_address;
+    u16 udp_input_port;
+    u8 udp_pad_index;
 };
 
 struct Values {
@@ -87,7 +101,7 @@ struct Values {
     bool show_console;
 
     // Controllers
-    int profile_index;
+    std::vector<InputProfile> input_profiles;
 
     // Game List
     bool show_add_ons;
@@ -99,6 +113,7 @@ struct Values {
 };
 
 extern Values values;
+
 } // namespace UISettings
 
 Q_DECLARE_METATYPE(UISettings::GameDir*);
