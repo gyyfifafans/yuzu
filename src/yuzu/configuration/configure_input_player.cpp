@@ -302,19 +302,6 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
                         },
                         InputCommon::Polling::DeviceType::AnalogPreferred);
         });
-
-        connect(analog_map_deadzone_and_modifier_slider[analog_id], &QSlider::valueChanged, [=] {
-            const float slider_value = analog_map_deadzone_and_modifier_slider[analog_id]->value();
-            if (analogs_param[analog_id].Get("engine", "") == "sdl") {
-                analog_map_deadzone_and_modifier_slider_label[analog_id]->setText(
-                    tr("Deadzone: %1%").arg(slider_value));
-                analogs_param[analog_id].Set("deadzone", slider_value / 100.0f);
-            } else {
-                analog_map_deadzone_and_modifier_slider_label[analog_id]->setText(
-                    tr("Modifier Scale: %1%").arg(slider_value));
-                analogs_param[analog_id].Set("modifier_scale", slider_value / 100.0f);
-            }
-        });
     }
 
     // Player Connected checkbox
@@ -380,20 +367,6 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
         connect(controller_color_buttons[i], &QPushButton::clicked, this,
                 [this, i] { OnControllerButtonClick(static_cast<int>(i)); });
     }
-
-    // Controller profile
-    ui->buttonDeleteProfile->setEnabled(ui->comboProfiles->count() > 1);
-    for (const auto& profile : UISettings::values.input_profiles) {
-        ui->comboProfiles->addItem(QString::fromStdString(profile.name));
-    }
-
-    ui->comboProfiles->setCurrentIndex(Settings::values.players[player_index].profile_index);
-
-    connect(ui->buttonNewProfile, &QPushButton::clicked, this, &ConfigureInputPlayer::NewProfile);
-    connect(ui->buttonDeleteProfile, &QPushButton::clicked, this,
-            &ConfigureInputPlayer::DeleteProfile);
-    connect(ui->buttonRenameProfile, &QPushButton::clicked, this,
-            &ConfigureInputPlayer::RenameProfile);
 
     LoadConfiguration();
 
@@ -759,62 +732,4 @@ void ConfigureInputPlayer::showEvent(QShowEvent* event) {
 
 void ConfigureInputPlayer::ConnectPlayer(bool connected) {
     ui->groupConnectedController->setChecked(connected);
-}
-
-void ConfigureInputPlayer::NewProfile() {
-    const QString name =
-        QInputDialog::getText(this, tr("New Profile"), tr("Enter the name for the new profile."));
-    if (name.isEmpty()) {
-        return;
-    }
-    if (IsProfileNameDuplicate(name)) {
-        WarnProposedProfileNameIsDuplicate();
-        return;
-    }
-
-    ApplyConfiguration();
-    // UISettings::values.input_profiles[ui->comboProfiles->currentIndex()] = ;
-    // UISettings::CreateProfile(name.toStdString());
-    ui->comboProfiles->addItem(name);
-    // ui->comboProfiles->setCurrentIndex(UISettings::values.current_input_profile_index);
-    LoadConfiguration();
-    ui->buttonDeleteProfile->setEnabled(ui->comboProfiles->count() > 1);
-}
-
-void ConfigureInputPlayer::DeleteProfile() {
-    const auto answer = QMessageBox::question(
-        this, tr("Delete Profile"), tr("Delete profile %1?").arg(ui->comboProfiles->currentText()));
-    if (answer != QMessageBox::Yes) {
-        return;
-    }
-    const int index = ui->comboProfiles->currentIndex();
-    ui->comboProfiles->removeItem(index);
-    ui->comboProfiles->setCurrentIndex(0);
-    // UISettings::DeleteProfile(index);
-    LoadConfiguration();
-    ui->buttonDeleteProfile->setEnabled(ui->comboProfiles->count() > 1);
-}
-
-void ConfigureInputPlayer::RenameProfile() {
-    const QString new_name = QInputDialog::getText(this, tr("Rename Profile"), tr("New name:"));
-    if (new_name.isEmpty()) {
-        return;
-    }
-    if (IsProfileNameDuplicate(new_name)) {
-        WarnProposedProfileNameIsDuplicate();
-        return;
-    }
-
-    ui->comboProfiles->setItemText(ui->comboProfiles->currentIndex(), new_name);
-    // UISettings::RenameCurrentProfile(new_name.toStdString());
-    // UISettings::SaveProfile(ui->comboProfiles->currentIndex());
-}
-
-bool ConfigureInputPlayer::IsProfileNameDuplicate(const QString& name) const {
-    return ui->comboProfiles->findText(name, Qt::MatchFixedString | Qt::MatchCaseSensitive) != -1;
-}
-
-void ConfigureInputPlayer::WarnProposedProfileNameIsDuplicate() {
-    QMessageBox::warning(this, tr("Duplicate profile name"),
-                         tr("Profile name already exists. Please choose a different name."));
 }

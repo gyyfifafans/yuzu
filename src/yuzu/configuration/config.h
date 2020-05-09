@@ -38,7 +38,6 @@ private:
     void ReadKeyboardValues();
     void ReadMouseValues();
     void ReadTouchscreenValues();
-    void ReadControllerProfiles();
 
     // Read functions bases off the respective config section names.
     void ReadAudioValues();
@@ -63,7 +62,6 @@ private:
     void SaveDebugValues();
     void SaveMouseValues();
     void SaveTouchscreenValues();
-    void SaveControllerProfiles();
 
     // Save functions based off the respective config section names.
     void SaveAudioValues();

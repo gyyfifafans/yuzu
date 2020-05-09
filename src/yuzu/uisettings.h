@@ -40,19 +40,6 @@ struct GameDir {
     };
 };
 
-struct InputProfile {
-    std::string name;
-    Settings::ButtonsRaw buttons;
-    Settings::AnalogsRaw analogs;
-    std::string lstick_mod;
-    std::string rstick_mod;
-    std::string motion_device;
-    std::string touch_device;
-    std::string udp_input_address;
-    u16 udp_input_port;
-    u8 udp_pad_index;
-};
-
 struct Values {
     QByteArray geometry;
     QByteArray state;
@@ -99,9 +86,6 @@ struct Values {
 
     // logging
     bool show_console;
-
-    // Controllers
-    std::vector<InputProfile> input_profiles;
 
     // Game List
     bool show_add_ons;

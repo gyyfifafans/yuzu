@@ -135,7 +135,7 @@ private:
 
     /// Analog inputs are also represented each with a single button, used to configure with an
     /// actual analog stick
-    std::array<QPushButton*, Settings::NativeAnalsdlog::NumAnalogs> analog_map_modifier;
+    std::array<QPushButton*, Settings::NativeAnalog::NumAnalogs> analog_map_modifier;
     std::array<QSlider*, Settings::NativeAnalog::NumAnalogs> analog_map_deadzone;
     std::array<QLabel*, Settings::NativeAnalog::NumAnalogs> analog_map_deadzone_label;
 
@@ -149,10 +149,6 @@ private:
 
     std::array<QPushButton*, 4> controller_color_buttons;
     std::array<QColor, 4> controller_colors;
-
-    /// Stores the current button configuration as a temporary profile. If the user saves the
-    /// controller settings, then this is saved to settings.
-    UISettings::InputProfile profile_edits;
 
     /// List of physical devices users can map with. If a SDL backed device is selected, then you
     /// can usue this device to get a default mapping
